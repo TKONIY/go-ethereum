@@ -44,7 +44,6 @@ func TestDatagen(T *testing.T) {
 	for i := range keys {
 		trie.Update(keys[i].Bytes(), values[i].Bytes())
 	}
-
 }
 
 // names are declared as Benchmark+(name in C++ MPT project)
@@ -58,8 +57,11 @@ func TestPutBenchmark(t *testing.T) {
 	}
 	end := time.Now()
 	duration := end.Sub(start)
-	fmt.Printf("put %v us", duration.Microseconds())
+	n := int64(len(keys))
+
+	fmt.Printf("Ethereum put execution time %d us, throughput %d qps\n", duration.Microseconds(), n*1000/duration.Microseconds()*1000)
 }
+
 func TestHashBenchmark(t *testing.T) {
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
 	trie := NewEmpty(triedb)
@@ -72,5 +74,6 @@ func TestHashBenchmark(t *testing.T) {
 	end := time.Now()
 	duration := end.Sub(start)
 
-	fmt.Printf("hash %v us", duration.Microseconds())
+	n := int64(len(keys))
+	fmt.Printf("Ethereum hash execution time %d us, throughput %d qps\n", duration.Microseconds(), n*1000/duration.Microseconds()*1000)
 }
