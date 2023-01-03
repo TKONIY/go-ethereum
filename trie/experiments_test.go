@@ -1,13 +1,18 @@
 package trie
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math/rand"
+	"os"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/beevik/etree"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 )
 
@@ -76,4 +81,136 @@ func TestHashBenchmark(t *testing.T) {
 
 	n := int64(len(keys))
 	fmt.Printf("Ethereum hash execution time %d us, throughput %d qps\n", duration.Microseconds(), n*1000/duration.Microseconds()*1000)
+}
+
+func read_wiki(t *testing.T) (keys, values []string) {
+	indexDir := "../../dataset/wiki/index/"
+	valueDir := "../../dataset/wiki/value/"
+	indexFiles, err := os.ReadDir(indexDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range indexFiles {
+		if !f.IsDir() {
+			path := indexDir + f.Name()
+			file, err := os.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer file.Close()
+			scanner := bufio.NewScanner(file)
+			for scanner.Scan() {
+				r, _ := regexp.Compile("^(.*:.*):.*$")
+				k := r.FindStringSubmatch(scanner.Text())[1]
+				keys = append(keys, k)
+			}
+		}
+	}
+	fmt.Println(len(keys))
+	valueFiles, err := os.ReadDir(valueDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range valueFiles {
+		if !f.IsDir() {
+			path := valueDir + f.Name()
+			doc := etree.NewDocument()
+			if err := doc.ReadFromFile(path); err != nil {
+				t.Fatal(err)
+			}
+			root := doc.Root()
+			for _, page := range root.SelectElements("page") {
+				pageDoc := etree.NewDocument()
+				pageDoc.AddChild(page)
+				value, err := pageDoc.WriteToString()
+				if err != nil {
+					t.Fatal(err)
+				}
+				values = append(values, value)
+			}
+		}
+	}
+	return keys, values
+}
+func TestPutWikiBench(t *testing.T) {
+	keys, values := read_wiki(t)
+	fmt.Println(len(keys), len(values))
+	triedb := NewDatabase(rawdb.NewMemoryDatabase())
+	trie := NewEmpty(triedb)
+	n := 10000
+	start := time.Now()
+	for i := 0; i < n; i++ {
+		trie.Update([]byte(keys[i]), []byte(values[i]))
+	}
+	end := time.Now()
+	duration := end.Sub(start)
+	fmt.Printf("%v elements\n", n)
+	fmt.Printf("Ethereum put execution time %d us, throughput %d qps\n", duration.Microseconds(), int64(n)*1000/duration.Microseconds()*1000)
+}
+
+func TestHashWikiBench(t *testing.T) {
+	keys, values := read_wiki(t)
+	fmt.Println(len(keys), len(values))
+	triedb := NewDatabase(rawdb.NewMemoryDatabase())
+	trie := NewEmpty(triedb)
+	// n := 10000
+	n := len(keys)
+	for i := 0; i < n; i++ {
+		trie.Update([]byte(keys[i]), []byte(values[i]))
+	}
+	start := time.Now()
+	trie.Hash()
+	end := time.Now()
+	duration := end.Sub(start)
+	fmt.Printf("%v elements\n", n)
+	fmt.Printf("Ethereum hash execution time %d us, throughput %d qps\n", duration.Microseconds(), int64(n)*1000/duration.Microseconds()*1000)
+}
+
+func read_ycsb(t *testing.T, path string) (wkeys, wvalues, rkeys []string) {
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		opEnd := strings.IndexByte(line, ' ')
+		op := line[:opEnd]
+		remain := line[opEnd+1:]
+		switch op {
+		case "INSERT":
+			kEnd := strings.IndexByte(remain, ' ')
+			key := remain[:kEnd]
+			value := remain[kEnd+1:]
+			wkeys = append(wkeys, key)
+			wvalues = append(wvalues, value)
+		case "READ":
+			key := remain
+			rkeys = append(rkeys, key)
+		default:
+			t.Fatalf("Wrong operation %v\n", op)
+		}
+	}
+	return wkeys, wvalues, rkeys
+}
+func TestETEYCSBBench(t *testing.T) {
+	wkeys, wvalues, rkeys := read_ycsb(t, "../../dataset/ycsb/workloada.txt")
+	fmt.Printf("Insert %d kv-pairs, Read %d k\n", len(wkeys), len(rkeys))
+
+	triedb := NewDatabase(rawdb.NewMemoryDatabase())
+	trie := NewEmpty(triedb)
+	nInsert := 50000
+	nRead := len(rkeys)
+	start := time.Now()
+	for i := 0; i < nInsert; i++ {
+		trie.Update([]byte(wkeys[i]), []byte(wvalues[i]))
+	}
+	trie.Hash()
+	for _, rk := range rkeys {
+		trie.Get([]byte(rk))
+	}
+	end := time.Now()
+	duration := end.Sub(start)
+	fmt.Printf("Ethereum end-to-end execution time %d us, throughput %d qps\n", duration.Microseconds(), int64(nInsert+nRead)*1000/duration.Microseconds()*1000)
 }
