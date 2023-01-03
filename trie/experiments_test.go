@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/beevik/etree"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 )
 
@@ -83,7 +84,7 @@ func TestHashBenchmark(t *testing.T) {
 	fmt.Printf("Ethereum hash execution time %d us, throughput %d qps\n", duration.Microseconds(), n*1000/duration.Microseconds()*1000)
 }
 
-func read_wiki(t *testing.T) (keys, values []string) {
+func readWiki(t *testing.T) (keys, values [][]byte) {
 	indexDir := "../../dataset/wiki/index/"
 	valueDir := "../../dataset/wiki/value/"
 	indexFiles, err := os.ReadDir(indexDir)
@@ -102,7 +103,7 @@ func read_wiki(t *testing.T) (keys, values []string) {
 			for scanner.Scan() {
 				r, _ := regexp.Compile("^(.*:.*):.*$")
 				k := r.FindStringSubmatch(scanner.Text())[1]
-				keys = append(keys, k)
+				keys = append(keys, []byte(k))
 			}
 		}
 	}
@@ -126,37 +127,37 @@ func read_wiki(t *testing.T) (keys, values []string) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				values = append(values, value)
+				values = append(values, []byte(value))
 			}
 		}
 	}
 	return keys, values
 }
 func TestPutWikiBench(t *testing.T) {
-	keys, values := read_wiki(t)
+	keys, values := readWiki(t)
 	fmt.Println(len(keys), len(values))
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
 	trie := NewEmpty(triedb)
 	n := 10000
 	start := time.Now()
 	for i := 0; i < n; i++ {
-		trie.Update([]byte(keys[i]), []byte(values[i]))
+		trie.Update(keys[i], values[i])
 	}
 	end := time.Now()
 	duration := end.Sub(start)
 	fmt.Printf("%v elements\n", n)
-	fmt.Printf("Ethereum put execution time %d us, throughput %d qps\n", duration.Microseconds(), int64(n)*1000/duration.Microseconds()*1000)
+	fmt.Printf("Ethereum puts execution time %d us, throughput %d qps\n", duration.Microseconds(), int64(n)*1000/duration.Microseconds()*1000)
 }
 
 func TestHashWikiBench(t *testing.T) {
-	keys, values := read_wiki(t)
+	keys, values := readWiki(t)
 	fmt.Println(len(keys), len(values))
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
 	trie := NewEmpty(triedb)
 	// n := 10000
 	n := len(keys)
 	for i := 0; i < n; i++ {
-		trie.Update([]byte(keys[i]), []byte(values[i]))
+		trie.Update(keys[i], values[i])
 	}
 	start := time.Now()
 	trie.Hash()
@@ -166,7 +167,7 @@ func TestHashWikiBench(t *testing.T) {
 	fmt.Printf("Ethereum hash execution time %d us, throughput %d qps\n", duration.Microseconds(), int64(n)*1000/duration.Microseconds()*1000)
 }
 
-func read_ycsb(t *testing.T, path string) (wkeys, wvalues, rkeys []string) {
+func readYcsb(t *testing.T, path string) (wkeys, wvalues, rkeys [][]byte) {
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -183,11 +184,11 @@ func read_ycsb(t *testing.T, path string) (wkeys, wvalues, rkeys []string) {
 			kEnd := strings.IndexByte(remain, ' ')
 			key := remain[:kEnd]
 			value := remain[kEnd+1:]
-			wkeys = append(wkeys, key)
-			wvalues = append(wvalues, value)
+			wkeys = append(wkeys, []byte(key))
+			wvalues = append(wvalues, []byte(value))
 		case "READ":
 			key := remain
-			rkeys = append(rkeys, key)
+			rkeys = append(rkeys, []byte(key))
 		default:
 			t.Fatalf("Wrong operation %v\n", op)
 		}
@@ -195,7 +196,7 @@ func read_ycsb(t *testing.T, path string) (wkeys, wvalues, rkeys []string) {
 	return wkeys, wvalues, rkeys
 }
 func TestETEYCSBBench(t *testing.T) {
-	wkeys, wvalues, rkeys := read_ycsb(t, "../../dataset/ycsb/workloada.txt")
+	wkeys, wvalues, rkeys := readYcsb(t, "../../dataset/ycsb/workloada.txt")
 	fmt.Printf("Insert %d kv-pairs, Read %d k\n", len(wkeys), len(rkeys))
 
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
@@ -204,7 +205,7 @@ func TestETEYCSBBench(t *testing.T) {
 	nRead := len(rkeys)
 	start := time.Now()
 	for i := 0; i < nInsert; i++ {
-		trie.Update([]byte(wkeys[i]), []byte(wvalues[i]))
+		trie.Update(wkeys[i], wvalues[i])
 	}
 	trie.Hash()
 	for _, rk := range rkeys {
@@ -213,4 +214,57 @@ func TestETEYCSBBench(t *testing.T) {
 	end := time.Now()
 	duration := end.Sub(start)
 	fmt.Printf("Ethereum end-to-end execution time %d us, throughput %d qps\n", duration.Microseconds(), int64(nInsert+nRead)*1000/duration.Microseconds()*1000)
+}
+
+func readEthtxn(t *testing.T) (keys, values [][]byte) {
+	ethDir := "/tmp/ethereum/transactions/"
+	ethFiles, err := os.ReadDir(ethDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range ethFiles {
+		if !f.IsDir() {
+			path := ethDir + f.Name()
+			file, err := os.Open(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer file.Close()
+			scanner := bufio.NewScanner(file)
+			buf := make([]byte, 0, 64*1024)
+			scanner.Buffer(buf, 1024*1024)
+			scanner.Scan() // header
+			for scanner.Scan() {
+				// TODO: key in
+				line := scanner.Text()
+				idx := strings.IndexByte(line, ',')
+				hashHex := line[:idx][2:]
+				key := common.Hex2Bytes(hashHex)
+				value := []byte(line[idx+1:])
+				keys = append(keys, key)
+				values = append(values, value)
+			}
+			if err := scanner.Err(); err != nil {
+				t.Fatal(err)
+			}
+			break // only the first one
+		}
+	}
+	return keys, values
+}
+func TestEthtxnBench(t *testing.T) {
+	keys, values := readEthtxn(t)
+	fmt.Println(len(keys), len(values))
+	triedb := NewDatabase(rawdb.NewMemoryDatabase())
+	trie := NewEmpty(triedb)
+	// n := 10000
+	n := len(keys)
+	start := time.Now()
+	for i := 0; i < n; i++ {
+		trie.Update(keys[i], values[i])
+	}
+	end := time.Now()
+	duration := end.Sub(start)
+	fmt.Printf("%v elements\n", n)
+	fmt.Printf("Ethereum put execution time %d us, throughput %d qps\n", duration.Microseconds(), int64(n)*1000/duration.Microseconds()*1000)
 }
