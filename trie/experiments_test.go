@@ -217,7 +217,7 @@ func TestETEYCSBBench(t *testing.T) {
 }
 
 func readEthtxn(t *testing.T) (keys, values [][]byte) {
-	ethDir := "/tmp/ethereum/transactions/"
+	ethDir := "/ethereum/transactions/"
 	ethFiles, err := os.ReadDir(ethDir)
 	if err != nil {
 		t.Fatal(err)
