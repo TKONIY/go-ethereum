@@ -222,7 +222,10 @@ func readEthtxn(t *testing.T) (keys, values [][]byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, f := range ethFiles {
+	for i, f := range ethFiles {
+		if i == 8 {
+			break
+		}
 		if !f.IsDir() {
 			path := ethDir + f.Name()
 			file, err := os.Open(path)
@@ -246,12 +249,11 @@ func readEthtxn(t *testing.T) (keys, values [][]byte) {
 			if err := scanner.Err(); err != nil {
 				t.Fatal(err)
 			}
-			break // only the first one
 		}
 	}
 	return keys, values
 }
-func TestEthtxnBench(t *testing.T) {
+func TestETEEthtxnBench(t *testing.T) {
 	keys, values := readEthtxn(t)
 	fmt.Println(len(keys), len(values))
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
