@@ -209,7 +209,7 @@ func TestETEYCSBBench(t *testing.T) {
 	}
 	trie.Hash()
 	for _, rk := range rkeys {
-		trie.Get([]byte(rk))
+		trie.Get(rk)
 	}
 	end := time.Now()
 	duration := end.Sub(start)
@@ -235,7 +235,6 @@ func readEthtxn(t *testing.T) (keys, values [][]byte) {
 			scanner.Buffer(buf, 1024*1024)
 			scanner.Scan() // header
 			for scanner.Scan() {
-				// TODO: key in
 				line := scanner.Text()
 				idx := strings.IndexByte(line, ',')
 				hashHex := line[:idx][2:]
