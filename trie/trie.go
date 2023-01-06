@@ -148,6 +148,14 @@ func (t *Trie) TryGet(key []byte) ([]byte, error) {
 	return value, err
 }
 
+func (t *Trie) TryGetHex(key []byte) ([]byte, error) {
+	value, newroot, didResolve, err := t.tryGet(t.root, key, 0)
+	if err == nil && didResolve {
+		t.root = newroot
+	}
+	return value, err
+}
+
 func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode node, didResolve bool, err error) {
 	switch n := (origNode).(type) {
 	case nil:
@@ -290,6 +298,26 @@ func (t *Trie) TryUpdate(key, value []byte) error {
 func (t *Trie) tryUpdate(key, value []byte) error {
 	t.unhashed++
 	k := keybytesToHex(key)
+	if len(value) != 0 {
+		_, n, err := t.insert(t.root, nil, k, valueNode(value))
+		if err != nil {
+			return err
+		}
+		t.root = n
+	} else {
+		_, n, err := t.delete(t.root, nil, k)
+		if err != nil {
+			return err
+		}
+		t.root = n
+	}
+	return nil
+}
+
+func (t *Trie) tryUpdateHex(k, value []byte) error {
+	t.unhashed++
+	// k := keybytesToHex(key)
+
 	if len(value) != 0 {
 		_, n, err := t.insert(t.root, nil, k, valueNode(value))
 		if err != nil {
