@@ -21,6 +21,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"math"
+	"runtime"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -152,7 +154,7 @@ func (t *Trie) TryGet(key []byte) ([]byte, error) {
 func (t *Trie) TryGetHex(key []byte) ([]byte, error) {
 	value, _, didResolve, err := t.tryGet(t.root, key, 0)
 	if err == nil && didResolve {
-		fmt.Println("Error in try Get Hex")
+		// fmt.Println("Error in try Get Hex")
 		return nil, nil
 		// t.root = newroot
 	}
@@ -162,13 +164,19 @@ func (t *Trie) TryGetHex(key []byte) ([]byte, error) {
 
 func (t *Trie) TryGetHexParallel(keys, values [][]byte, n int) {
 	var wg sync.WaitGroup
-	wg.Add(n)
-	for i := 0; i < n; i++ {
+	nThread := runtime.GOMAXPROCS(0)
+	stride := int(math.Ceil(float64(n) / float64(nThread)))
+	wg.Add(nThread)
+	for i := 0; i < nThread; i++ {
 
-		go func(index int) {
+		go func(iThread, stride, n int) {
 			defer wg.Done()
-			values[index], _ = t.TryGetHex(keys[index])
-		}(i)
+			iStart := iThread * stride
+			iEnd := (iThread + 1) * stride
+			for i := iStart; i < iEnd && i < n; i++ {
+				values[i], _ = t.TryGetHex(keys[i])
+			}
+		}(i, stride, n)
 	}
 	wg.Wait()
 }

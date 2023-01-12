@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -321,8 +322,9 @@ func readEthtxn(t *testing.T) (keys, values [][]byte) {
 func TestETEEthtxnBench(t *testing.T) {
 	keys, values := readEthtxn(t)
 	fmt.Println(len(keys), len(values))
-	n := 64000
+	n := 640000
 	fmt.Printf("howmuch%d\n", n)
+	fmt.Printf("max procs %v", runtime.GOMAXPROCS(0))
 	{
 		triedb := NewDatabase(rawdb.NewMemoryDatabase())
 		trie := NewEmpty(triedb)
