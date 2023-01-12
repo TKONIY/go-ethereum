@@ -12,10 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/beevik/etree"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 )
+
+// !!! use TryGetHex and tryUpdateHex
 
 func data_gen() (keys_bytes, values_bytes []*bytes.Buffer) {
 	n := 1 << 16
@@ -48,12 +49,14 @@ func TestDatagen(T *testing.T) {
 	keys, values := data_gen()
 
 	for i := range keys {
+		// TODO TryUpdateHex
 		trie.Update(keys[i].Bytes(), values[i].Bytes())
 	}
 }
 
 // names are declared as Benchmark+(name in C++ MPT project)
 func TestPutBenchmark(t *testing.T) {
+	// TODO: Use Hex
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
 	trie := NewEmpty(triedb)
 	keys, values := data_gen()
@@ -69,6 +72,7 @@ func TestPutBenchmark(t *testing.T) {
 }
 
 func TestHashBenchmark(t *testing.T) {
+	// TODO: Use Hex
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
 	trie := NewEmpty(triedb)
 	keys, values := data_gen()
@@ -84,13 +88,64 @@ func TestHashBenchmark(t *testing.T) {
 	fmt.Printf("Ethereum hash execution time %d us, throughput %d qps\n", duration.Microseconds(), n*1000/duration.Microseconds()*1000)
 }
 
-func readWiki(t *testing.T) (keys, values [][]byte) {
+// func readWiki(t *testing.T) (keys, values [][]byte) {
+// 	indexDir := "../../dataset/wiki/index/"
+// 	valueDir := "../../dataset/wiki/value/"
+// 	indexFiles, err := os.ReadDir(indexDir)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	for _, f := range indexFiles {
+// 		if !f.IsDir() {
+// 			path := indexDir + f.Name()
+// 			file, err := os.Open(path)
+// 			if err != nil {
+// 				t.Fatal(err)
+// 			}
+// 			defer file.Close()
+// 			scanner := bufio.NewScanner(file)
+// 			for scanner.Scan() {
+// 				r, _ := regexp.Compile("^(.*:.*):.*$")
+// 				k := r.FindStringSubmatch(scanner.Text())[1]
+// 				keys = append(keys, keybytesToHex([]byte(k)))
+// 			}
+// 		}
+// 	}
+// 	fmt.Println(len(keys))
+// 	valueFiles, err := os.ReadDir(valueDir)
+// 	if err != nil {
+// 		t.Fatal(err)
+// 	}
+// 	for _, f := range valueFiles {
+// 		if !f.IsDir() {
+// 			path := valueDir + f.Name()
+// 			doc := etree.NewDocument()
+// 			if err := doc.ReadFromFile(path); err != nil {
+// 				t.Fatal(err)
+// 			}
+// 			root := doc.Root()
+// 			for _, page := range root.SelectElements("page") {
+// 				pageDoc := etree.NewDocument()
+// 				pageDoc.AddChild(page)
+// 				value, err := pageDoc.WriteToString()
+// 				if err != nil {
+// 					t.Fatal(err)
+// 				}
+// 				values = append(values, []byte(value))
+// 			}
+// 		}
+// 	}
+// 	return keys, values
+// }
+
+func readWikiFast(t *testing.T) (keys, values [][]byte) {
 	indexDir := "../../dataset/wiki/index/"
 	valueDir := "../../dataset/wiki/value/"
 	indexFiles, err := os.ReadDir(indexDir)
 	if err != nil {
 		t.Fatal(err)
 	}
+	r, _ := regexp.Compile("^(.*:.*):.*$")
 	for _, f := range indexFiles {
 		if !f.IsDir() {
 			path := indexDir + f.Name()
@@ -101,9 +156,8 @@ func readWiki(t *testing.T) (keys, values [][]byte) {
 			defer file.Close()
 			scanner := bufio.NewScanner(file)
 			for scanner.Scan() {
-				r, _ := regexp.Compile("^(.*:.*):.*$")
 				k := r.FindStringSubmatch(scanner.Text())[1]
-				keys = append(keys, []byte(k))
+				keys = append(keys, keybytesToHex([]byte(k)))
 			}
 		}
 	}
@@ -112,36 +166,46 @@ func readWiki(t *testing.T) (keys, values [][]byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	rStart, _ := regexp.Compile("<page>")
+	rEnd, _ := regexp.Compile("</page>")
 	for _, f := range valueFiles {
 		if !f.IsDir() {
 			path := valueDir + f.Name()
-			doc := etree.NewDocument()
-			if err := doc.ReadFromFile(path); err != nil {
+			file, err := os.Open(path)
+			if err != nil {
 				t.Fatal(err)
 			}
-			root := doc.Root()
-			for _, page := range root.SelectElements("page") {
-				pageDoc := etree.NewDocument()
-				pageDoc.AddChild(page)
-				value, err := pageDoc.WriteToString()
-				if err != nil {
-					t.Fatal(err)
+			defer file.Close()
+			scanner := bufio.NewScanner(file)
+			value := make([]byte, 0)
+			for scanner.Scan() {
+				line := scanner.Text() + "\n"
+				if rStart.MatchString(line) {
+					value = []byte(line)
+				} else if rEnd.MatchString(line) {
+					value = append(value, []byte(line)...)
+					values = append(values, value)
+				} else {
+					value = append(value, []byte(line)...)
 				}
-				values = append(values, []byte(value))
 			}
 		}
 	}
 	return keys, values
 }
+
 func TestPutWikiBench(t *testing.T) {
-	keys, values := readWiki(t)
+	// keys, values := readWiki(t)
+	keys, values := readWikiFast(t)
 	fmt.Println(len(keys), len(values))
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
 	trie := NewEmpty(triedb)
 	n := 10000
 	start := time.Now()
 	for i := 0; i < n; i++ {
-		trie.Update(keys[i], values[i])
+		// update using hex encoding
+		trie.tryUpdateHex(keys[i], values[i])
 	}
 	end := time.Now()
 	duration := end.Sub(start)
@@ -150,14 +214,14 @@ func TestPutWikiBench(t *testing.T) {
 }
 
 func TestHashWikiBench(t *testing.T) {
-	keys, values := readWiki(t)
+	keys, values := readWikiFast(t)
 	fmt.Println(len(keys), len(values))
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
 	trie := NewEmpty(triedb)
 	// n := 10000
 	n := len(keys)
 	for i := 0; i < n; i++ {
-		trie.Update(keys[i], values[i])
+		trie.tryUpdateHex(keys[i], values[i])
 	}
 	start := time.Now()
 	trie.Hash()
@@ -184,11 +248,11 @@ func readYcsb(t *testing.T, path string) (wkeys, wvalues, rkeys [][]byte) {
 			kEnd := strings.IndexByte(remain, ' ')
 			key := remain[:kEnd]
 			value := remain[kEnd+1:]
-			wkeys = append(wkeys, []byte(key))
+			wkeys = append(wkeys, keybytesToHex([]byte(key)))
 			wvalues = append(wvalues, []byte(value))
 		case "READ":
 			key := remain
-			rkeys = append(rkeys, []byte(key))
+			rkeys = append(rkeys, keybytesToHex([]byte(key)))
 		default:
 			t.Fatalf("Wrong operation %v\n", op)
 		}
@@ -205,11 +269,11 @@ func TestETEYCSBBench(t *testing.T) {
 	nRead := len(rkeys)
 	start := time.Now()
 	for i := 0; i < nInsert; i++ {
-		trie.Update(wkeys[i], wvalues[i])
+		trie.tryUpdateHex(wkeys[i], wvalues[i])
 	}
 	trie.Hash()
 	for _, rk := range rkeys {
-		trie.Get(rk)
+		trie.TryGetHex(rk)
 	}
 	end := time.Now()
 	duration := end.Sub(start)
