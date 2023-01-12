@@ -21,6 +21,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -149,11 +150,27 @@ func (t *Trie) TryGet(key []byte) ([]byte, error) {
 }
 
 func (t *Trie) TryGetHex(key []byte) ([]byte, error) {
-	value, newroot, didResolve, err := t.tryGet(t.root, key, 0)
+	value, _, didResolve, err := t.tryGet(t.root, key, 0)
 	if err == nil && didResolve {
-		t.root = newroot
+		fmt.Println("Error in try Get Hex")
+		return nil, nil
+		// t.root = newroot
 	}
+
 	return value, err
+}
+
+func (t *Trie) TryGetHexParallel(keys, values [][]byte, n int) {
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+
+		go func(index int) {
+			defer wg.Done()
+			values[index], _ = t.TryGetHex(keys[index])
+		}(i)
+	}
+	wg.Wait()
 }
 
 func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode node, didResolve bool, err error) {

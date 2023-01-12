@@ -321,25 +321,52 @@ func readEthtxn(t *testing.T) (keys, values [][]byte) {
 func TestETEEthtxnBench(t *testing.T) {
 	keys, values := readEthtxn(t)
 	fmt.Println(len(keys), len(values))
-	triedb := NewDatabase(rawdb.NewMemoryDatabase())
-	trie := NewEmpty(triedb)
-	n := 640000
-	// n := len(keys)
-	t1 := time.Now()
-	for i := 0; i < n; i++ {
-		// trie.Update(keys[i], values[i])
-		trie.tryUpdateHex(keys[i], values[i])
-		// trie.insert(trie.root, nil, keys[i], valueNode(values[i]))
-	}
-	t2 := time.Now()
-	trie.Hash()
-	t3 := time.Now()
-	for i := 0; i < n; i++ {
-		trie.TryGetHex(keys[i])
-		// trie.Get(keys[i])
-	}
-	t4 := time.Now()
-	duration := t4.Sub(t1)
+	n := 64000
 	fmt.Printf("howmuch%d\n", n)
-	fmt.Printf("Ethereum execution time %d us, throughput %d qps [put: %d us] [hash: %d us] [get: %d us]\n", duration.Microseconds(), int64(n)*1000.0/duration.Microseconds()*1000.0, t2.Sub(t1).Microseconds(), t3.Sub(t2).Microseconds(), t4.Sub(t3).Microseconds())
+	{
+		triedb := NewDatabase(rawdb.NewMemoryDatabase())
+		trie := NewEmpty(triedb)
+		// n := len(keys)
+		t1 := time.Now()
+		for i := 0; i < n; i++ {
+			// trie.Update(keys[i], values[i])
+			trie.tryUpdateHex(keys[i], values[i])
+			// trie.insert(trie.root, nil, keys[i], valueNode(values[i]))
+		}
+		t2 := time.Now()
+		trie.Hash()
+		t3 := time.Now()
+		for i := 0; i < n; i++ {
+			trie.TryGetHex(keys[i])
+			// trie.Get(keys[i])
+		}
+		t4 := time.Now()
+		duration := t4.Sub(t1)
+		fmt.Printf("Ethereum execution time %d us, throughput %d qps [put: %d us] [hash: %d us] [get: %d us]\n", duration.Microseconds(), int64(n)*1000.0/duration.Microseconds()*1000.0, t2.Sub(t1).Microseconds(), t3.Sub(t2).Microseconds(), t4.Sub(t3).Microseconds())
+	}
+
+	{
+		triedb := NewDatabase(rawdb.NewMemoryDatabase())
+		trie := NewEmpty(triedb)
+		// n := len(keys)
+		valuesGet := make([][]byte, n)
+
+		t1 := time.Now()
+		for i := 0; i < n; i++ {
+			// trie.Update(keys[i], values[i])
+			trie.tryUpdateHex(keys[i], values[i])
+			// trie.insert(trie.root, nil, keys[i], valueNode(values[i]))
+		}
+		t2 := time.Now()
+		trie.Hash()
+		t3 := time.Now()
+		trie.TryGetHexParallel(keys, valuesGet, n)
+		// for i := range valuesGet {
+		// 	assert.Equal(t, valuesGet[i], values[i])
+		// }
+		t4 := time.Now()
+		duration := t4.Sub(t1)
+		fmt.Printf("Ethereum Parallel execution time %d us, throughput %d qps [put: %d us] [hash: %d us] [get: %d us]\n", duration.Microseconds(), int64(n)*1000.0/duration.Microseconds()*1000.0, t2.Sub(t1).Microseconds(), t3.Sub(t2).Microseconds(), t4.Sub(t3).Microseconds())
+	}
+
 }
