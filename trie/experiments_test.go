@@ -324,7 +324,7 @@ func TestETEEthtxnBench(t *testing.T) {
 	fmt.Println(len(keys), len(values))
 	n := 640000
 	fmt.Printf("howmuch%d\n", n)
-	fmt.Printf("max procs %v", runtime.GOMAXPROCS(0))
+	fmt.Printf("max procs %v\n", runtime.GOMAXPROCS(0))
 	{
 		triedb := NewDatabase(rawdb.NewMemoryDatabase())
 		trie := NewEmpty(triedb)
@@ -341,7 +341,11 @@ func TestETEEthtxnBench(t *testing.T) {
 		for i := 0; i < n; i++ {
 			trie.TryGetHex(keys[i])
 			// trie.Get(keys[i])
+			// assert.Equal(t, value, values[i])
 		}
+		// for i := range valuesGet {
+		// 	assert.Equal(t, valuesGet[i], values[i])
+		// }
 		t4 := time.Now()
 		duration := t4.Sub(t1)
 		fmt.Printf("Ethereum execution time %d us, throughput %d qps [put: %d us] [hash: %d us] [get: %d us]\n", duration.Microseconds(), int64(n)*1000.0/duration.Microseconds()*1000.0, t2.Sub(t1).Microseconds(), t3.Sub(t2).Microseconds(), t4.Sub(t3).Microseconds())
