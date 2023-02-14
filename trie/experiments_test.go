@@ -25,11 +25,17 @@ func TestInsertWiki(t *testing.T) {
 	for i := 0; i < insert_num; i++ {
 		trie.tryUpdateHex(keys[i], values[i])
 	}
-	trie.Hash()
 	t2 := time.Now()
-	us := t2.Sub(t1).Microseconds()
+	trie.Hash()
+	t3 := time.Now()
 
-	fmt.Printf("Ethereum Insert throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/us, insert_num, 0)
+	us := t3.Sub(t1).Microseconds()
+	insert_us := t2.Sub(t1).Microseconds()
+	hash_us := t3.Sub(t2).Microseconds()
+
+	fmt.Printf("Ethereum e2e throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/us, insert_num, 0)
+	fmt.Printf("Ethereum Insert throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/insert_us, insert_num, 0)
+	fmt.Printf("Ethereum hash throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/hash_us, insert_num, 0)
 }
 
 func TestInsertYCSB(t *testing.T) {
@@ -47,11 +53,17 @@ func TestInsertYCSB(t *testing.T) {
 	for i := 0; i < insert_num; i++ {
 		trie.tryUpdateHex(keys[i], values[i])
 	}
-	trie.Hash()
 	t2 := time.Now()
-	us := t2.Sub(t1).Microseconds()
+	trie.Hash()
+	t3 := time.Now()
 
-	fmt.Printf("Ethereum Insert throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/us, insert_num, 0)
+	us := t3.Sub(t1).Microseconds()
+	insert_us := t2.Sub(t1).Microseconds()
+	hash_us := t3.Sub(t2).Microseconds()
+
+	fmt.Printf("Ethereum e2e throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/us, insert_num, 0)
+	fmt.Printf("Ethereum Insert throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/insert_us, insert_num, 0)
+	fmt.Printf("Ethereum hash throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/hash_us, insert_num, 0)
 }
 
 func TestInsertEthtxn(t *testing.T) {
@@ -69,14 +81,20 @@ func TestInsertEthtxn(t *testing.T) {
 	for i := 0; i < insert_num; i++ {
 		trie.tryUpdateHex(keys[i], values[i])
 	}
-	trie.Hash()
 	t2 := time.Now()
-	us := t2.Sub(t1).Microseconds()
+	trie.Hash()
+	t3 := time.Now()
 
-	fmt.Printf("Ethereum Insert throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/us, insert_num, 0)
+	us := t3.Sub(t1).Microseconds()
+	insert_us := t2.Sub(t1).Microseconds()
+	hash_us := t3.Sub(t2).Microseconds()
+
+	fmt.Printf("Ethereum e2e throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/us, insert_num, 0)
+	fmt.Printf("Ethereum Insert throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/insert_us, insert_num, 0)
+	fmt.Printf("Ethereum hash throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/hash_us, insert_num, 0)
 }
 
-func TestLookupWiki(t *testing.T) {
+func TestLookupWikiParallel(t *testing.T) {
 	wkeys, wvalues := readWikiFast(t)
 	record_num := get_record_num(WIKI, t)
 	lookup_num := get_record_num(LOOKUP, t)
@@ -103,10 +121,10 @@ func TestLookupWiki(t *testing.T) {
 	t2 := time.Now()
 	us := t2.Sub(t1).Microseconds()
 
-	fmt.Printf("Ethereum lookup response time: %d us for %d operations and trie with %d records\n", us, lookup_num, record_num)
+	fmt.Printf("Ethereum parallel lookup response time: %d us for %d operations and trie with %d records\n", us, lookup_num, record_num)
 }
 
-func TestLookupYCSB(t *testing.T) {
+func TestLookupYCSBParallel(t *testing.T) {
 	wkeys, wvalues, rkeys := readYcsb(t)
 	assert.Equal(t, len(wkeys), len(wvalues))
 
@@ -132,10 +150,10 @@ func TestLookupYCSB(t *testing.T) {
 	t2 := time.Now()
 	us := t2.Sub(t1).Microseconds()
 
-	fmt.Printf("Ethereum lookup response time: %d us for %d operations and trie with %d records\n", us, lookup_num, record_num)
+	fmt.Printf("Ethereum parallel lookup response time: %d us for %d operations and trie with %d records\n", us, lookup_num, record_num)
 }
 
-func TestLookupEthtxn(t *testing.T) {
+func TestLookupEthtxnParallel(t *testing.T) {
 	wkeys, wvalues := readEthtxn(t)
 	record_num := get_record_num(ETH, t)
 	lookup_num := get_record_num(LOOKUP, t)
@@ -159,6 +177,101 @@ func TestLookupEthtxn(t *testing.T) {
 
 	t1 := time.Now()
 	trie.TryGetHexParallel(rkeys, valuesGet, lookup_num)
+	t2 := time.Now()
+	us := t2.Sub(t1).Microseconds()
+
+	fmt.Printf("Ethereum parallel lookup response time: %d us for %d operations and trie with %d records\n", us, lookup_num, record_num)
+}
+
+func TestLookupEthtxn(t *testing.T) {
+	wkeys, wvalues := readEthtxn(t)
+	record_num := get_record_num(ETH, t)
+	lookup_num := get_record_num(LOOKUP, t)
+	assert.LessOrEqual(t, record_num, len(wkeys))
+
+	rkeys := random_select_read_data(wkeys, record_num, lookup_num)
+	assert.Equal(t, len(rkeys), lookup_num)
+
+	fmt.Printf("Inserting %d k-v pairs, then Reading %d k-v pairs \n", record_num,
+		lookup_num)
+
+	triedb := NewDatabase(rawdb.NewMemoryDatabase())
+	trie := NewEmpty(triedb)
+	// valuesGet := make([][]byte, lookup_num)
+
+	for i := 0; i < record_num; i++ {
+		trie.tryUpdateHex(wkeys[i], wvalues[i])
+	}
+	// TODO: hash or not?
+	// trie.Hash()
+
+	t1 := time.Now()
+	for _, rk := range rkeys {
+		trie.TryGetHex(rk)
+	}
+	t2 := time.Now()
+	us := t2.Sub(t1).Microseconds()
+
+	fmt.Printf("Ethereum lookup response time: %d us for %d operations and trie with %d records\n", us, lookup_num, record_num)
+}
+
+func TestLookupWiki(t *testing.T) {
+	wkeys, wvalues := readWikiFast(t)
+	record_num := get_record_num(WIKI, t)
+	lookup_num := get_record_num(LOOKUP, t)
+	assert.LessOrEqual(t, record_num, len(wkeys))
+
+	rkeys := random_select_read_data(wkeys, record_num, lookup_num)
+	assert.Equal(t, len(rkeys), lookup_num)
+
+	fmt.Printf("Inserting %d k-v pairs, then Reading %d k-v pairs \n", record_num,
+		lookup_num)
+
+	triedb := NewDatabase(rawdb.NewMemoryDatabase())
+	trie := NewEmpty(triedb)
+	// valuesGet := make([][]byte, lookup_num)
+
+	for i := 0; i < record_num; i++ {
+		trie.tryUpdateHex(wkeys[i], wvalues[i])
+	}
+	// TODO: hash or not?
+	// trie.Hash()
+
+	t1 := time.Now()
+	for _, rk := range rkeys {
+		trie.TryGetHex(rk)
+	}
+	t2 := time.Now()
+	us := t2.Sub(t1).Microseconds()
+
+	fmt.Printf("Ethereum lookup response time: %d us for %d operations and trie with %d records\n", us, lookup_num, record_num)
+}
+
+func TestLookupYCSB(t *testing.T) {
+	wkeys, wvalues, rkeys := readYcsb(t)
+	assert.Equal(t, len(wkeys), len(wvalues))
+
+	record_num := get_record_num(YCSB, t)
+	lookup_num := get_record_num(LOOKUP, t)
+	assert.LessOrEqual(t, record_num, len(wkeys))
+	assert.LessOrEqual(t, lookup_num, len(rkeys))
+
+	fmt.Printf("Inserting %d k-v pairs, then Reading %d k-v pairs\n", record_num, lookup_num)
+
+	triedb := NewDatabase(rawdb.NewMemoryDatabase())
+	trie := NewEmpty(triedb)
+	// valuesGet := make([][]byte, lookup_num)
+
+	for i := 0; i < record_num; i++ {
+		trie.tryUpdateHex(wkeys[i], wvalues[i])
+	}
+	// TODO: hash or not?
+	// trie.Hash()
+
+	t1 := time.Now()
+	for _, rk := range rkeys {
+		trie.TryGetHex(rk)
+	}
 	t2 := time.Now()
 	us := t2.Sub(t1).Microseconds()
 
