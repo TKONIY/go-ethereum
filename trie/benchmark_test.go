@@ -194,6 +194,7 @@ func readWikiFast(t *testing.T) (keys, values [][]byte) {
 	r, _ := regexp.Compile("^(.*:.*):.*$")
 	for _, f := range indexFiles {
 		if !f.IsDir() {
+			// println(f.Name())
 			path := indexDir + f.Name()
 			file, err := os.Open(path)
 			if err != nil {
@@ -218,6 +219,7 @@ func readWikiFast(t *testing.T) (keys, values [][]byte) {
 	rEnd, _ := regexp.Compile("</page>")
 	for _, f := range valueFiles {
 		if !f.IsDir() {
+			// println(f.Name())
 			path := valueDir + f.Name()
 			file, err := os.Open(path)
 			if err != nil {
@@ -232,11 +234,16 @@ func readWikiFast(t *testing.T) (keys, values [][]byte) {
 
 			value := make([]byte, 0)
 			for scanner.Scan() {
-				line := scanner.Text() + "\n"
+				line := scanner.Text()
+				// delete the tail spaces
+				line = strings.TrimRight(line, " ")
+				line += "\n"
 				if rStart.MatchString(line) {
 					value = []byte(line)
 				} else if rEnd.MatchString(line) {
 					value = append(value, []byte(line)...)
+					value = bytes.Trim(value, " \n")
+					value = append(value, 0x00)
 					values = append(values, value)
 				} else {
 					value = append(value, []byte(line)...)
@@ -405,5 +412,22 @@ func TestETEEthtxnBench(t *testing.T) {
 		duration := t4.Sub(t1)
 		fmt.Printf("Ethereum Parallel execution time %d us, throughput %d qps [put: %d us] [hash: %d us] [get: %d us]\n", duration.Microseconds(), int64(n)*1000.0/duration.Microseconds()*1000.0, t2.Sub(t1).Microseconds(), t3.Sub(t2).Microseconds(), t4.Sub(t3).Microseconds())
 	}
+}
 
+func TestHashRawEncode(t *testing.T) {
+	triedb := NewDatabase(rawdb.NewMemoryDatabase())
+	trie := NewEmpty(triedb)
+	keys := [3]string{"doe", "dog", "dogglesworth"}
+	values := [3]string{"aaaaaaaaaaaa", "bbbbbbbbbbbb", "cccccccccccc"}
+	for i := range keys {
+		hex := keybytesToHex([]byte(keys[i]))
+		fmt.Printf("%v\n", hex)
+		value := []byte(values[i])
+		trie.tryUpdateHex(hex, value)
+	}
+
+	// k := []byte("a")
+	// v := []byte("b")
+	// trie.tryUpdateHex(k, v)
+	fmt.Printf("%v\n", trie.Hash())
 }

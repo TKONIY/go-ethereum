@@ -26,13 +26,14 @@ func TestInsertWiki(t *testing.T) {
 		trie.tryUpdateHex(keys[i], values[i])
 	}
 	t2 := time.Now()
-	trie.Hash()
+	hash := trie.Hash()
 	t3 := time.Now()
 
 	us := t3.Sub(t1).Microseconds()
 	insert_us := t2.Sub(t1).Microseconds()
 	hash_us := t3.Sub(t2).Microseconds()
 
+	fmt.Printf("Ethereum hash result: %v\n", hash)
 	fmt.Printf("Ethereum e2e throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/us, insert_num, 0)
 	fmt.Printf("Ethereum Insert throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/insert_us, insert_num, 0)
 	fmt.Printf("Ethereum hash throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/hash_us, insert_num, 0)
@@ -54,13 +55,14 @@ func TestInsertYCSB(t *testing.T) {
 		trie.tryUpdateHex(keys[i], values[i])
 	}
 	t2 := time.Now()
-	trie.Hash()
+	hash := trie.Hash()
 	t3 := time.Now()
 
 	us := t3.Sub(t1).Microseconds()
 	insert_us := t2.Sub(t1).Microseconds()
 	hash_us := t3.Sub(t2).Microseconds()
 
+	fmt.Printf("Ethereum hash result: %v\n", hash)
 	fmt.Printf("Ethereum e2e throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/us, insert_num, 0)
 	fmt.Printf("Ethereum Insert throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/insert_us, insert_num, 0)
 	fmt.Printf("Ethereum hash throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/hash_us, insert_num, 0)
@@ -82,13 +84,14 @@ func TestInsertEthtxn(t *testing.T) {
 		trie.tryUpdateHex(keys[i], values[i])
 	}
 	t2 := time.Now()
-	trie.Hash()
+	hash := trie.Hash()
 	t3 := time.Now()
 
 	us := t3.Sub(t1).Microseconds()
 	insert_us := t2.Sub(t1).Microseconds()
 	hash_us := t3.Sub(t2).Microseconds()
 
+	fmt.Printf("Ethereum hash result: %v\n", hash)
 	fmt.Printf("Ethereum e2e throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/us, insert_num, 0)
 	fmt.Printf("Ethereum Insert throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/insert_us, insert_num, 0)
 	fmt.Printf("Ethereum hash throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/hash_us, insert_num, 0)

@@ -129,13 +129,14 @@ func (buf *encBuffer) writeUint64(i uint64) {
 }
 
 func (buf *encBuffer) writeBytes(b []byte) {
-	if len(b) == 1 && b[0] <= 0x7F {
-		// fits single byte, no string header
-		buf.str = append(buf.str, b[0])
-	} else {
-		buf.encodeStringHeader(len(b))
-		buf.str = append(buf.str, b...)
-	}
+	// if len(b) == 1 && b[0] <= 0x7F {
+	// 	// fits single byte, no string header
+	// 	buf.str = append(buf.str, b[0])
+	// } else {
+	// 	buf.encodeStringHeader(len(b))
+	// 	buf.str = append(buf.str, b...)
+	// }
+	buf.str = append(buf.str, b...)
 }
 
 func (buf *encBuffer) writeString(s string) {

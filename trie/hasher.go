@@ -170,8 +170,8 @@ func (h *hasher) fullnodeToHash(n *fullNode, force bool) node {
 //
 // All node encoding must be done like this:
 //
-//     node.encode(h.encbuf)
-//     enc := h.encodedBytes()
+//	node.encode(h.encbuf)
+//	enc := h.encodedBytes()
 //
 // This convention exists because node.encode can only be inlined/escape-analyzed when
 // called on a concrete receiver type.
@@ -183,10 +183,12 @@ func (h *hasher) encodedBytes() []byte {
 
 // hashData hashes the provided data
 func (h *hasher) hashData(data []byte) hashNode {
+	// fmt.Printf("hash input: %v\n", hex.EncodeToString(data))
 	n := make(hashNode, 32)
 	h.sha.Reset()
 	h.sha.Write(data)
 	h.sha.Read(n)
+	// fmt.Printf("hash output: %v\n", hex.EncodeToString(n))
 	return n
 }
 
