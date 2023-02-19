@@ -63,6 +63,7 @@ const (
 	YCSB
 	ETH
 	LOOKUP
+	TRIESIZE
 )
 
 func get_record_num(dataset Dataset, t *testing.T) int {
@@ -76,6 +77,8 @@ func get_record_num(dataset Dataset, t *testing.T) int {
 		data_num_str = os.Getenv("GMPT_ETH_DATA_VOLUME")
 	case LOOKUP:
 		data_num_str = os.Getenv("GMPT_DATA_LOOKUP_VOLUME")
+	case TRIESIZE: 
+		data_num_str = os.Getenv("GMPT_TRIESIZE")
 	default:
 		t.Fatalf("Wrong Dataset Type\n")
 	}
