@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 	"time"
-
+	"math/rand"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/stretchr/testify/assert"
 )
@@ -13,8 +13,8 @@ import (
 func TestInsertWiki(t *testing.T) {
 	keys, values := readWikiFast(t)
 	assert.Equal(t, len(keys), len(values))
-	// insert_num := get_record_num(WIKI, t)
-	insert_num := 2500
+	insert_num := get_record_num(WIKI, t)
+	// insert_num := 2500
 	assert.LessOrEqual(t, insert_num, len(keys))
 
 	fmt.Printf("Inserting %d k-v pairs\n", insert_num)
@@ -22,13 +22,10 @@ func TestInsertWiki(t *testing.T) {
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
 	trie := NewEmpty(triedb)
 
+	random_start := rand.Intn(320000)
 	t1 := time.Now()
 	for i := 0; i < insert_num; i++ {
-		pos :=i
-		if insert_num < 40000 {
-			pos = i+60000
-		} 
-		trie.tryUpdateHex(keys[pos], values[pos])
+		trie.tryUpdateHex(keys[i+random_start], values[i+random_start])
 	}
 	t2 := time.Now()
 	hash := trie.Hash()
@@ -47,8 +44,8 @@ func TestInsertWiki(t *testing.T) {
 func TestInsertYCSB(t *testing.T) {
 	keys, values, _ := readYcsb(t)
 	assert.Equal(t, len(keys), len(values))
-	// insert_num := get_record_num(YCSB, t)
-	insert_num:= 5000
+	insert_num := get_record_num(YCSB, t)
+	// insert_num:= 5000
 	assert.LessOrEqual(t, insert_num, len(keys))
 
 	fmt.Printf("Inserting %d k-v pairs\n", insert_num)
@@ -77,8 +74,8 @@ func TestInsertYCSB(t *testing.T) {
 func TestInsertEthtxn(t *testing.T) {
 	keys, values := readEthtxn(t)
 	assert.Equal(t, len(keys), len(values))
-	// insert_num := get_record_num(ETH, t)
-	insert_num := 5000
+	insert_num := get_record_num(ETH, t)
+	// insert_num := 5000
 	assert.LessOrEqual(t, insert_num, len(keys))
 
 	fmt.Printf("Inserting %d k-v pairs\n", insert_num)
@@ -86,9 +83,10 @@ func TestInsertEthtxn(t *testing.T) {
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
 	trie := NewEmpty(triedb)
 
+	random_start := rand.Intn(640000)
 	t1 := time.Now()
 	for i := 0; i < insert_num; i++ {
-		trie.tryUpdateHex(keys[i], values[i])
+		trie.tryUpdateHex(keys[i+random_start], values[i+random_start])
 	}
 	t2 := time.Now()
 	hash := trie.Hash()
@@ -107,7 +105,7 @@ func TestInsertEthtxn(t *testing.T) {
 
 func TestLookupWikiParallel(t *testing.T) {
 	wkeys, wvalues := readWikiFast(t)
-	record_num := get_record_num(WIKI, t)
+	record_num := 320000
 	lookup_num := get_record_num(LOOKUP, t)
 	assert.LessOrEqual(t, record_num, len(wkeys))
 
@@ -121,8 +119,9 @@ func TestLookupWikiParallel(t *testing.T) {
 	trie := NewEmpty(triedb)
 	valuesGet := make([][]byte, lookup_num)
 
+	random_start := rand.Intn(320000)
 	for i := 0; i < record_num; i++ {
-		trie.tryUpdateHex(wkeys[i], wvalues[i])
+		trie.tryUpdateHex(wkeys[i+random_start], wvalues[i+random_start])
 	}
 	// TODO: hash or not?
 	// trie.Hash()
@@ -136,14 +135,14 @@ func TestLookupWikiParallel(t *testing.T) {
 }
 
 func TestLookupYCSBParallel(t *testing.T) {
-	wkeys, wvalues, rkeys := readYcsb(t)
+	wkeys, wvalues, all_rkeys := readYcsb(t)
 	assert.Equal(t, len(wkeys), len(wvalues))
 
-	record_num := get_record_num(YCSB, t)
+	record_num := 1280000
 	lookup_num := get_record_num(LOOKUP, t)
 	assert.LessOrEqual(t, record_num, len(wkeys))
-	assert.LessOrEqual(t, lookup_num, len(rkeys))
-
+	assert.LessOrEqual(t, lookup_num, len(all_rkeys))
+	rkeys := all_rkeys[0:lookup_num]
 	fmt.Printf("Inserting %d k-v pairs, then Reading %d k-v pairs\n", record_num, lookup_num)
 
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
@@ -166,7 +165,7 @@ func TestLookupYCSBParallel(t *testing.T) {
 
 func TestLookupEthtxnParallel(t *testing.T) {
 	wkeys, wvalues := readEthtxn(t)
-	record_num := get_record_num(ETH, t)
+	record_num := 640000
 	lookup_num := get_record_num(LOOKUP, t)
 	assert.LessOrEqual(t, record_num, len(wkeys))
 
@@ -180,8 +179,9 @@ func TestLookupEthtxnParallel(t *testing.T) {
 	trie := NewEmpty(triedb)
 	valuesGet := make([][]byte, lookup_num)
 
+	random_start := rand.Intn(640000)
 	for i := 0; i < record_num; i++ {
-		trie.tryUpdateHex(wkeys[i], wvalues[i])
+		trie.tryUpdateHex(wkeys[i+random_start], wvalues[i+random_start])
 	}
 	// TODO: hash or not?
 	// trie.Hash()
@@ -196,7 +196,7 @@ func TestLookupEthtxnParallel(t *testing.T) {
 
 func TestLookupEthtxn(t *testing.T) {
 	wkeys, wvalues := readEthtxn(t)
-	record_num := get_record_num(ETH, t)
+	record_num := 640000
 	lookup_num := get_record_num(LOOKUP, t)
 	assert.LessOrEqual(t, record_num, len(wkeys))
 
@@ -210,8 +210,9 @@ func TestLookupEthtxn(t *testing.T) {
 	trie := NewEmpty(triedb)
 	// valuesGet := make([][]byte, lookup_num)
 
+	random_start := rand.Intn(640000)
 	for i := 0; i < record_num; i++ {
-		trie.tryUpdateHex(wkeys[i], wvalues[i])
+		trie.tryUpdateHex(wkeys[i+random_start], wvalues[i+random_start])
 	}
 	// TODO: hash or not?
 	// trie.Hash()
@@ -228,7 +229,7 @@ func TestLookupEthtxn(t *testing.T) {
 
 func TestLookupWiki(t *testing.T) {
 	wkeys, wvalues := readWikiFast(t)
-	record_num := get_record_num(WIKI, t)
+	record_num := 320000
 	lookup_num := get_record_num(LOOKUP, t)
 	assert.LessOrEqual(t, record_num, len(wkeys))
 
@@ -242,8 +243,9 @@ func TestLookupWiki(t *testing.T) {
 	trie := NewEmpty(triedb)
 	// valuesGet := make([][]byte, lookup_num)
 
+	random_start := rand.Intn(320000)
 	for i := 0; i < record_num; i++ {
-		trie.tryUpdateHex(wkeys[i], wvalues[i])
+		trie.tryUpdateHex(wkeys[i+random_start], wvalues[i+random_start])
 	}
 	// TODO: hash or not?
 	// trie.Hash()
@@ -259,14 +261,15 @@ func TestLookupWiki(t *testing.T) {
 }
 
 func TestLookupYCSB(t *testing.T) {
-	wkeys, wvalues, rkeys := readYcsb(t)
+	wkeys, wvalues, all_rkeys := readYcsb(t)
 	assert.Equal(t, len(wkeys), len(wvalues))
 
-	record_num := get_record_num(YCSB, t)
+	record_num := 1280000
 	lookup_num := get_record_num(LOOKUP, t)
 	assert.LessOrEqual(t, record_num, len(wkeys))
-	assert.LessOrEqual(t, lookup_num, len(rkeys))
-
+	assert.LessOrEqual(t, lookup_num, len(all_rkeys))
+	rkeys := all_rkeys[0:lookup_num]
+	// fmt.Printf("length:%d\n", len(rkeys))
 	fmt.Printf("Inserting %d k-v pairs, then Reading %d k-v pairs\n", record_num, lookup_num)
 
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
@@ -325,4 +328,8 @@ func TestEthTrieSize(t *testing.T) {
 	fmt.Printf("Ethereum e2e throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/us, insert_num, 0)
 	fmt.Printf("Ethereum Insert throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/insert_us, insert_num, 0)
 	fmt.Printf("Ethereum hash throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/hash_us, insert_num, 0)
+}
+
+func TestKeccak256(t *testing.T) {
+	
 }
