@@ -120,7 +120,7 @@ type testWorkerBackend struct {
 func newTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, n int) *testWorkerBackend {
 	var gspec = core.Genesis{
 		Config: chainConfig,
-		Alloc:  core.GenesisAlloc{testBankAddress: {Balance: testBankFunds}},
+		Alloc:  core.GenesisAlloc{testBankAddress: {Balance: testBankFunds}}, // TODO: pre-allocate accounts here
 	}
 
 	switch e := engine.(type) {

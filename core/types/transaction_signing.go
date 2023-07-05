@@ -29,11 +29,11 @@ import (
 
 var ErrInvalidChainId = errors.New("invalid chain id for signer")
 
-// sigCache is used to cache the derived sender and contains
+// SigCache is used to cache the derived sender and contains
 // the signer used to derive it.
-type sigCache struct {
-	signer Signer
-	from   common.Address
+type SigCache struct {
+	Signer Signer
+	From   common.Address
 }
 
 // MakeSigner returns a Signer based on the given chain config and block number.
@@ -129,21 +129,31 @@ func MustSignNewTx(prv *ecdsa.PrivateKey, s Signer, txdata TxData) *Transaction 
 // signing method. The cache is invalidated if the cached signer does
 // not match the signer used in the current call.
 func Sender(signer Signer, tx *Transaction) (common.Address, error) {
-	if sc := tx.from.Load(); sc != nil {
-		sigCache := sc.(sigCache)
+	// TODO: 直接cache行不行
+	// fmt.Printf("Enter Sender\n")
+	if sc := tx.From.Load(); sc != nil {
+		sigCache := sc.(SigCache)
 		// If the signer used to derive from in a previous
 		// call is not the same as used current, invalidate
 		// the cache.
-		if sigCache.signer.Equal(signer) {
-			return sigCache.from, nil
-		}
+		// fmt.Printf("There is cached sender address: %v\n", sigCache.From)
+		// if sigCache.Signer.Equal(signer) {
+		// fmt.Printf("Use cached sender address: %v\n", sigCache.From)
+		return sigCache.From, nil
+		// }
+		// else { // TODO: skip the signer logic
+		// 	sigCache.Signer = signer
+		// 	tx.From.Store(sigCache)
+		// 	return sigCache.From, nil
+		// }
 	}
 
 	addr, err := signer.Sender(tx)
+	// fmt.Printf("Use uncached sender address: %v\n", addr)
 	if err != nil {
 		return common.Address{}, err
 	}
-	tx.from.Store(sigCache{signer: signer, from: addr})
+	tx.From.Store(SigCache{Signer: signer, From: addr})
 	return addr, nil
 }
 
@@ -399,6 +409,31 @@ func (s EIP155Signer) Hash(tx *Transaction) common.Hash {
 		s.chainId, uint(0), uint(0),
 	})
 }
+
+// TODO: GMPT Signer
+// type GMPTBenchmarkSigner struct {
+// }
+
+// func (s GMPTBenchmarkSigner) ChainID() *big.Int {
+// 	return nil
+// }
+
+// func (s GMPTBenchmarkSigner) Equal(s2 Signer) bool {
+// 	_, ok := s2.(GMPTBenchmarkSigner)
+// 	return ok
+// }
+
+// func (s GMPTBenchmarkSigner) Sender(tx *Transaction) (common.Address, error) {
+// 	if tx.Type() != LegacyTxType {
+// 		return common.Address{}, ErrTxTypeNotSupported
+// 	}
+// 	// v, r, s := tx.RawSignatureValues()
+// 	// return recoverPlain(s.Hash(tx), r, s, v, false)
+
+// 	return tx.from.Load()., nil
+// }
+
+// TODO: GMPT Signer
 
 // HomesteadTransaction implements TransactionInterface using the
 // homestead rules.

@@ -911,6 +911,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 		// Accumulate all unknown transactions for deeper processing
 		news = append(news, tx)
 	}
+	println("addTxs: len(news) = ", len(news))
 	if len(news) == 0 {
 		return errs
 	}
@@ -943,6 +944,7 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error,
 	errs := make([]error, len(txs))
 	for i, tx := range txs {
 		replaced, err := pool.add(tx, local)
+		// fmt.Printf("addTxsLocked: i = %d, replaced = %v, err = %v\n", i, replaced, err)
 		errs[i] = err
 		if err == nil && !replaced {
 			dirty.addTx(tx)

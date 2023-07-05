@@ -600,8 +600,8 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 // CreateAccount is called during the EVM CREATE operation. The situation might arise that
 // a contract does the following:
 //
-//   1. sends funds to sha(account ++ (nonce + 1))
-//   2. tx_create(sha(account ++ nonce)) (note that this gets the address of 1)
+//  1. sends funds to sha(account ++ (nonce + 1))
+//  2. tx_create(sha(account ++ nonce)) (note that this gets the address of 1)
 //
 // Carrying over the balance ensures that Ether doesn't disappear.
 func (s *StateDB) CreateAccount(addr common.Address) {
@@ -844,7 +844,7 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	// to pull useful data from disk.
 	for addr := range s.stateObjectsPending {
 		if obj := s.stateObjects[addr]; !obj.deleted {
-			obj.updateRoot(s.db)
+			obj.updateRoot(s.db) // TODO: not updating, only prefetching
 		}
 	}
 	// Now we're about to start to write changes to the trie. The trie is so far
@@ -856,6 +856,11 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 		}
 	}
 	usedAddrs := make([][]byte, 0, len(s.stateObjectsPending))
+
+	// TODO: the updateStateObject actually update the trie
+	// !! TODO: the updateStateObject actually update the trie
+	// TODO: the updateStateObject actually update the trie
+	// !! TODO: the updateStateObject actually update the trie
 	for addr := range s.stateObjectsPending {
 		if obj := s.stateObjects[addr]; obj.deleted {
 			s.deleteStateObject(obj)
@@ -896,6 +901,7 @@ func (s *StateDB) clearJournalAndRefund() {
 
 // Commit writes the state to the underlying in-memory trie database.
 func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
+	println("StateDB.Commit()")
 	if s.dbErr != nil {
 		return common.Hash{}, fmt.Errorf("commit aborted due to earlier error: %v", s.dbErr)
 	}

@@ -649,7 +649,7 @@ func (t *Trie) Commit(collectLeaf bool) (common.Hash, *NodeSet, error) {
 	}
 	// Derive the hash for all dirty nodes first. We hold the assumption
 	// in the following procedure that all nodes are hashed.
-	rootHash := t.Hash()
+	rootHash := t.Hash() // TODO: the root hash has been calculated
 
 	// Do a quick check if we really need to commit. This can happen e.g.
 	// if we load a trie for reading storage values, but don't write to it.
