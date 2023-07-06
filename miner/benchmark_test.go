@@ -1,8 +1,12 @@
 package miner
 
 import (
+	"bufio"
 	"fmt"
 	"math/big"
+	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,22 +28,136 @@ import (
 var (
 	testGMPTSenderAddress = common.HexToAddress("0x0000000000000000000000000000000000001111")
 	testGMPTSenderKey, _  = crypto.GenerateKey()
+	testGenesisAlloc      = make(core.GenesisAlloc)
+	testSenderNounce      = make(map[common.Address]uint64)
+	testTxList            = make([]*types.Transaction, 0)
 )
+
+func readEthTxns(t *testing.T, n int) {
+	if testBankFunds == nil {
+		t.Fatal("testBankFunds is nil")
+	}
+	testGenesisAlloc[testBankAddress] = core.GenesisAccount{Balance: testBankFunds}
+	// for each item
+	// TODO: read sender address
+	// TODO: read other attributes
+	ethDir := "/ethereum/transactions-sort/"
+	ethFiles, err := os.ReadDir(ethDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := uint64(0)
+	for i, f := range ethFiles {
+		if i == 8 {
+			break
+		}
+		if !f.IsDir() {
+			path := ethDir + f.Name()
+			file, err := os.Open(path)
+			fmt.Printf("path: %v\n", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer file.Close()
+			scanner := bufio.NewScanner(file)
+			buf := make([]byte, 0, 64*1024)
+			scanner.Buffer(buf, 1024*1024)
+			scanner.Scan()
+			for scanner.Scan() {
+				line := scanner.Text()
+				nounce := testSenderNounce[parseGMPTTxSender(t, line)]
+				testSenderNounce[parseGMPTTxSender(t, line)] = nounce + 1
+				testTxList = append(testTxList, parseGMPTTx(t, line, nounce))
+				testGenesisAlloc[parseGMPTTxSender(t, line)] = core.GenesisAccount{Balance: testBankFunds}
+				// count
+				count++
+				if count == uint64(n) {
+					return
+				}
+			}
+			if err := scanner.Err(); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+func parseGMPTTx(t *testing.T, line string, nounce uint64) *types.Transaction {
+	// Read from csv line
+	lineSplit := strings.Split(line, ",")
+	// nounce, err := strconv.ParseUint(lineSplit[1], 10, 64)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	fromAddress := common.HexToAddress(lineSplit[3])
+	toAddress := common.HexToAddress(lineSplit[4])
+	value, _ := new(big.Int).SetString(lineSplit[5], 10)
+	if value == nil {
+		t.Fatal("value is nil")
+	}
+	// gasLimit := params.TxGas
+	// gasPrice := big.NewInt(10 * params.InitialBaseFee)
+	gasLimit, err := strconv.ParseUint(lineSplit[6], 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gasPrice, _ := new(big.Int).SetString(lineSplit[7], 10)
+	if gasPrice == nil {
+		t.Fatal("gasPrice is nil")
+	}
+
+	tx := types.NewTransaction(
+		nounce,         // nonce
+		toAddress,      // toAddress
+		value,          // Value
+		gasLimit,       // [FIX] gas limit
+		gasPrice,       // [FIX] gasPrice
+		fromAddress[:], // TODO: for uinqueness
+	)
+
+	// TODO: ensure the sender key here should not be used
+	// rndSenderKey, err := crypto.GenerateKey()
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// TODO: signiture value should not be the same for each sender
+	// or the hash might be the same
+	tx, err = types.SignTx(tx, types.HomesteadSigner{}, testBankKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx.From.Store(types.SigCache{Signer: types.HomesteadSigner{}, From: fromAddress})
+	addr2, err := types.Sender(types.HomesteadSigner{}, tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("sender address after From.Store: %v\n", addr2)
+	return tx
+}
+
+func parseGMPTTxReceiver(t *testing.T, line string) common.Address {
+	toAddress := common.HexToAddress(strings.Split(line, ",")[4])
+	return toAddress
+}
+
+func parseGMPTTxSender(t *testing.T, line string) common.Address {
+	fromAddress := common.HexToAddress(strings.Split(line, ",")[3])
+	return fromAddress
+}
 
 // ----------------------------------------------------------------------------
 // Functions for GMPT ---------------------------------------------------------
 // ----------------------------------------------------------------------------
 func newGMPTTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, n int) *testWorkerBackend {
-	genesisAlloc := make(core.GenesisAlloc)
+	// genesisAlloc := make(core.GenesisAlloc)
 	// TODO: read from csv and allocate balance for all sender accounts
-	// TODO: 全部读进去还是只有涉及的读进去?
-	genesisAlloc[testBankAddress] = core.GenesisAccount{Balance: testBankFunds}
-	genesisAlloc[testGMPTSenderAddress] = core.GenesisAccount{Balance: testBankFunds}
-
+	// TODO: 所有sender账户全部读进来，然后分配余额
+	// genesisAlloc[testBankAddress] = core.GenesisAccount{Balance: testBankFunds}
+	// genesisAlloc[testGMPTSenderAddress] = core.GenesisAccount{Balance: testBankFunds}
 	var gspec = core.Genesis{
 		GasLimit: params.MaxGasLimit, // TODO: Have set to max gas linit
 		Config:   chainConfig,
-		Alloc:    genesisAlloc, // TODO: pre-allocate accounts here
+		Alloc:    testGenesisAlloc, // TODO: pre-allocate accounts here
 	}
 
 	switch e := engine.(type) {
@@ -95,11 +213,6 @@ func newGMPTTestWorker(t *testing.T, chainConfig *params.ChainConfig, engine con
 	return w, backend
 }
 
-func readEthtxns(t *testing.T, n int) ([]*types.Transaction, []*common.Address) {
-	// TODO: read from csv
-	return nil, nil
-}
-
 func newGMPTRandomTx(t *testing.T, nounce uint64) *types.Transaction {
 	// transfer from bank to random user
 	// TODO We do not know the key, we only knows the from address
@@ -147,6 +260,15 @@ func TestGMPTTransactionProcessing(t *testing.T) {
 		db          = rawdb.NewMemoryDatabase() // TODO: disk?
 	)
 
+	// read data
+	readEthTxns(t, 100)
+	for _, tx := range testTxList {
+		fmt.Printf("tx: %v\n sender: %v\n", tx, tx.From.Load().(types.SigCache).From)
+	}
+	for addr, _ := range testGenesisAlloc {
+		fmt.Printf("addr: %v\n", addr)
+	}
+
 	chainConfig = params.AllEthashProtocolChanges
 	engine = ethash.NewFaker()
 
@@ -172,22 +294,13 @@ func TestGMPTTransactionProcessing(t *testing.T) {
 	// Start mining!
 	w.start()
 
-	// handle transactions
-	txsList := make([]*types.Transaction, 0)
-	for i := uint64(0); i < 3; i++ {
-		// tx := b.newRandomTx(true)
-		tx := newGMPTRandomTx(t, i) // TODO
-		txsList = append(txsList, tx)
-		// fmt.Println("tx", tx.Hash().Hex())
-	}
-	errs := b.txPool.AddLocals(txsList)
+	errs := b.txPool.AddLocals(testTxList)
 	for _, err := range errs {
 		if err != nil {
 			t.Fatalf("failed to add local transaction: %v", err)
 		}
 	}
 
-	// TODO: fill transactions
 	select {
 	case ev := <-sub.Chan():
 		block := ev.Data.(core.NewMinedBlockEvent).Block
