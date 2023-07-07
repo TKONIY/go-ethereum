@@ -127,11 +127,11 @@ func parseGMPTTx(t *testing.T, line string, nounce uint64) *types.Transaction {
 		t.Fatal(err)
 	}
 	tx.From.Store(types.SigCache{Signer: types.HomesteadSigner{}, From: fromAddress})
-	addr2, err := types.Sender(types.HomesteadSigner{}, tx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Printf("sender address after From.Store: %v\n", addr2)
+	// addr2, err := types.Sender(types.HomesteadSigner{}, tx)
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// fmt.Printf("sender address after From.Store: %v\n", addr2)
 	return tx
 }
 
@@ -261,13 +261,13 @@ func TestGMPTTransactionProcessing(t *testing.T) {
 	)
 
 	// read data
-	readEthTxns(t, 100)
-	for _, tx := range testTxList {
-		fmt.Printf("tx: %v\n sender: %v\n", tx, tx.From.Load().(types.SigCache).From)
-	}
-	for addr, _ := range testGenesisAlloc {
-		fmt.Printf("addr: %v\n", addr)
-	}
+	readEthTxns(t, 100000)
+	// for _, tx := range testTxList {
+	// 	fmt.Printf("tx: %v\n sender: %v\n", tx, tx.From.Load().(types.SigCache).From)
+	// }
+	// for addr, _ := range testGenesisAlloc {
+	// 	fmt.Printf("addr: %v\n", addr)
+	// }
 
 	chainConfig = params.AllEthashProtocolChanges
 	engine = ethash.NewFaker()

@@ -893,7 +893,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		//
 		// We use the eip155 signer regardless of the current hf.
 		from, _ := types.Sender(env.signer, tx) // 这里的From和test中原本设置的from一样，即publickeytoaddress()
-		fmt.Printf("commit tx %v from %v\n", tx.Hash(), from)
+		// fmt.Printf("commit tx %v from %v\n", tx.Hash(), from)
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
 		// phase, start ignoring the sender until we do.
 		if tx.Protected() && !w.chainConfig.IsEIP155(env.header.Number) {

@@ -946,7 +946,7 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error,
 	errs := make([]error, len(txs))
 	for i, tx := range txs {
 		replaced, err := pool.add(tx, local)
-		fmt.Printf("addTxsLocked: i = %d, replaced = %v, err = %v\n", i, replaced, err)
+		// fmt.Printf("addTxsLocked: i = %d, replaced = %v, err = %v\n", i, replaced, err)
 		errs[i] = err
 		if err == nil && !replaced {
 			dirty.addTx(tx)
