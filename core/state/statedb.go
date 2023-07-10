@@ -23,6 +23,7 @@ import (
 	"math/big"
 	"sort"
 	"time"
+	"unsafe"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -34,6 +35,10 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
+
+// #include "libgmpt.h"
+// #cgo LDFLAGS: -L. -lgmpt -L/usr/local/cuda/lib64 -lcudart -lstdc++ -lcryptopp -lm
+import "C"
 
 type revision struct {
 	id           int
@@ -816,6 +821,72 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 	s.clearJournalAndRefund()
 }
 
+func keybytesToHex(str []byte) []byte {
+	l := len(str)*2 + 1
+	var nibbles = make([]byte, l)
+	for i, b := range str {
+		nibbles[i*2] = b / 16
+		nibbles[i*2+1] = b % 16
+	}
+	nibbles[l-1] = 16
+	return nibbles
+}
+
+func (s *StateDB) GMPTIntermediateRoot() common.Hash {
+	// TODO: collect objects froms.stateObjectsPending
+	// TODO: transform into GMPT input organization
+	// TODO: ref: func(s *StateDB) updateStateObject(obj * stateObject)
+	//			Key: hash(key), Value: RLP(account)
+	// TODO: call GMPT
+	// NO prefetcher
+
+	// Timer
+	collectStart := time.Now()
+	keysHexs := make([]byte, 0, len(s.stateObjectsPending)*32)
+	keysHexsIndexs := make([]int32, 0, len(s.stateObjectsPending)*2)
+	values := make([]byte, 0, len(s.stateObjectsPending)*32)
+	valuesIndexs := make([]int64, 0, len(s.stateObjectsPending)*2)
+	insert_num := int(0)
+	for addr := range s.stateObjectsPending {
+		if obj := s.stateObjects[addr]; !obj.deleted {
+			keyHex := keybytesToHex(s.trie.(*trie.StateTrie).HashKey(addr[:]))
+			value, err := rlp.EncodeToBytes(&obj.data)
+			if err != nil {
+				panic(err)
+			}
+			keysHexsIndexs = append(keysHexsIndexs, int32(len(keysHexs)))
+			keysHexs = append(keysHexs, keyHex...)
+			keysHexsIndexs = append(keysHexsIndexs, int32(len(keysHexs)-1))
+			valuesIndexs = append(valuesIndexs, int64(len(values)))
+			values = append(values, value...)
+			valuesIndexs = append(valuesIndexs, int64(len(values)-1))
+			insert_num++
+		}
+	}
+	collectEnd := time.Now()
+	println("[Timer] GMPTIntermediateRoot() collect:", collectEnd.Sub(collectStart))
+	// TODO: Call cgo
+	cStart := time.Now()
+	hash := C.build_mpt_olc(
+		(*C.uchar)(unsafe.Pointer(&keysHexs[0])),
+		(*C.int)(unsafe.Pointer(&keysHexsIndexs[0])),
+		(*C.uchar)(unsafe.Pointer(&values[0])),
+		(*C.int64_t)(unsafe.Pointer(&valuesIndexs[0])),
+		(**C.uchar)(C.NULL),
+		C.int(insert_num))
+	cEnd := time.Now()
+	println("[Timer] GMPTIntermediateRoot() cgo:", cEnd.Sub(cStart))
+	mySlice := C.GoBytes(unsafe.Pointer(hash), common.HashLength)
+	// const uint8_t *build_mpt_2phase(const uint8_t *keys_hexs, int *keys_hexs_indexs,
+	// 	const uint8_t *values_bytes,
+	// 	int64_t *values_bytes_indexs,
+	// 	const uint8_t **values_hps, int insert_num);
+	fmt.Printf("GMPTIntermediateRoot() hash: %v\n", mySlice)
+	ret := common.Hash{}
+	copy(ret[:], mySlice)
+	return ret
+}
+
 // IntermediateRoot computes the current root hash of the state trie.
 // It is called in between transactions to get the root hash that
 // goes into transaction receipts.
@@ -863,9 +934,11 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	// !! TODO: the updateStateObject actually update the trie
 	for addr := range s.stateObjectsPending {
 		if obj := s.stateObjects[addr]; obj.deleted {
+			println("UNEXPECTED: StateDB.IntermediateRoot() deleteStateObject()")
 			s.deleteStateObject(obj)
 			s.AccountDeleted += 1
 		} else {
+			// println("StateDB.IntermediateRoot() updateStateObject()")
 			s.updateStateObject(obj)
 			s.AccountUpdated += 1
 		}

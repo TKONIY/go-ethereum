@@ -600,7 +600,14 @@ func (ethash *Ethash) Prepare(chain consensus.ChainHeaderReader, header *types.H
 func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
 	// Accumulate any block and uncle rewards and commit the final state root
 	accumulateRewards(chain.Config(), state, header, uncles)
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	// TODO: GMpt IntermediateRoot
+	if len(txs) < 1000000000 {
+		println("Use Geth's intermediateROOT")
+		header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	} else {
+		println("Use GMPT's intermediateROOT!!!!")
+		header.Root = state.GMPTIntermediateRoot()
+	}
 }
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and
@@ -608,7 +615,7 @@ func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.
 func (ethash *Ethash) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// Finalize block
 	ethash.Finalize(chain, header, state, txs, uncles)
-
+	println("ethash.FinalizeAndAssemble")
 	// Header seems complete, assemble into a block and return
 	return types.NewBlock(header, txs, uncles, receipts, trie.NewStackTrie(nil)), nil
 }
