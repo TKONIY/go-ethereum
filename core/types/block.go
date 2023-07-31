@@ -199,7 +199,14 @@ func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*
 	if len(txs) == 0 {
 		b.header.TxHash = EmptyRootHash
 	} else {
-		b.header.TxHash = DeriveSha(Transactions(txs), hasher)
+		// if len(txs) < 100 {
+		if true {
+			fmt.Printf("Use Geth's DeriveSha for transaction trie\n")
+			b.header.TxHash = DeriveSha(Transactions(txs), hasher)
+		} else {
+			fmt.Printf("Use GMPT's DeriveShaGMPT for transaction trie\n")
+			b.header.TxHash = DeriveShaGMPTMultiCore(Transactions(txs), "txs")
+		}
 		b.transactions = make(Transactions, len(txs))
 		copy(b.transactions, txs)
 	}
@@ -207,7 +214,14 @@ func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*
 	if len(receipts) == 0 {
 		b.header.ReceiptHash = EmptyRootHash
 	} else {
-		b.header.ReceiptHash = DeriveSha(Receipts(receipts), hasher)
+		// if len(txs) < 100 {
+		if true {
+			fmt.Printf("Use Geth's DeriveSha for receipt trie\n")
+			b.header.ReceiptHash = DeriveSha(Receipts(receipts), hasher)
+		} else {
+			fmt.Printf("Use GMPT's DeriveShaGMPT for receipt trie\n")
+			b.header.ReceiptHash = DeriveShaGMPTMultiCore(Receipts(receipts), "receipts")
+		}
 		b.header.Bloom = CreateBloom(receipts)
 	}
 

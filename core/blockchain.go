@@ -813,7 +813,7 @@ func (bc *BlockChain) writeHeadBlock(block *types.Block) {
 	rawdb.WriteHeadHeaderHash(batch, block.Hash())
 	rawdb.WriteHeadFastBlockHash(batch, block.Hash())
 	rawdb.WriteCanonicalHash(batch, block.Hash(), block.NumberU64())
-	rawdb.WriteTxLookupEntriesByBlock(batch, block)
+	rawdb.WriteTxLookupEntriesByBlock(batch, block) // TODO:
 	rawdb.WriteHeadBlockHash(batch, block.Hash())
 
 	// Flush the whole batch into the disk, exit the node if failed
@@ -1271,6 +1271,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	}
 	// Commit all cached state changes into underlying memory database.
 	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number()))
+	// TODO: set stateObjectsDirty to empty
+	// TODO: return node set
+
 	if err != nil {
 		return err
 	}

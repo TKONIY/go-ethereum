@@ -601,13 +601,21 @@ func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.
 	// Accumulate any block and uncle rewards and commit the final state root
 	accumulateRewards(chain.Config(), state, header, uncles)
 	// TODO: GMpt IntermediateRoot
-	if len(txs) < 1000000000 {
-		println("Use Geth's intermediateROOT")
+	start := time.Now()
+	println(len(txs))
+	// if len(txs) < 100 {
+	if true {
+		println("Use Geth's intermediateROOT!!!!")
 		header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+		println("Use Geth's intermediateROOT!!!!")
 	} else {
 		println("Use GMPT's intermediateROOT!!!!")
-		header.Root = state.GMPTIntermediateRoot()
+		// header.Root = state.GMPTIntermediateRoot()
+		header.Root = state.GMPTIntermediateRootMultiCore()
+		println("Use GMPT's intermediateROOT!!!!")
 	}
+	end := time.Now()
+	fmt.Println("IntermediateRoot time: ", end.Sub(start))
 }
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and

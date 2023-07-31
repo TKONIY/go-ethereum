@@ -21,7 +21,9 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"runtime"
 	"sort"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -37,7 +39,7 @@ import (
 )
 
 // #include "libgmpt.h"
-// #cgo LDFLAGS: -L. -lgmpt -L/usr/local/cuda/lib64 -lcudart -lstdc++ -lcryptopp -lm
+// #cgo LDFLAGS: -L. -lgmpt -L/usr/local/cuda/lib64 -lcudart -lstdc++ -lcryptopp -lm -L/usr/local/lib -ltbb -ltbbmalloc
 import "C"
 
 type revision struct {
@@ -832,6 +834,137 @@ func keybytesToHex(str []byte) []byte {
 	return nibbles
 }
 
+func (s *StateDB) GMPTIntermediateRootMultiCore() common.Hash {
+	collectStart := time.Now()
+
+	nThread := runtime.GOMAXPROCS(0) / 2
+	wg := sync.WaitGroup{}
+
+	allKeysHexs := make([][]byte, nThread)
+	allKeysHexsIndexs := make([][]int32, nThread)
+	allValues := make([][]byte, nThread)
+	allValuesIndexs := make([][]int64, nThread)
+
+	type tuple struct {
+		addr common.Address
+		obj  *stateObject
+	}
+	stateObjectsPending := make([]tuple, 0, len(s.stateObjectsPending))
+	for addr := range s.stateObjectsPending {
+		if obj := s.stateObjects[addr]; !obj.deleted {
+			stateObjectsPending = append(stateObjectsPending, tuple{addr, obj})
+		}
+	}
+
+	kernel := func(tid int) {
+
+		l := len(stateObjectsPending)
+		st := tid * (l / nThread)
+		end := (tid + 1) * (l / nThread)
+		if tid == nThread-1 {
+			end = l
+		}
+
+		allKeysHexs[tid] = make([]byte, 0, (end-st)*32)
+		allKeysHexsIndexs[tid] = make([]int32, 0, (end-st)*2)
+		allValues[tid] = make([]byte, 0, (end-st)*1000)
+		allValuesIndexs[tid] = make([]int64, 0, (end-st)*2)
+
+		// for addr := range s.stateObjectsPending {
+		// 	if i >= st && i < end {
+		// 		// TODO: do it
+		// 		if obj := s.stateObjects[addr]; !obj.deleted {
+		for i := st; i < end; i++ {
+			addr := stateObjectsPending[i].addr
+			obj := stateObjectsPending[i].obj
+			keyHex := keybytesToHex(s.trie.(*trie.StateTrie).HashKey(addr[:]))
+			value, err := rlp.EncodeToBytes(&obj.data)
+			if err != nil {
+				panic(err)
+			}
+			allKeysHexsIndexs[tid] = append(allKeysHexsIndexs[tid], int32(len(allKeysHexs[tid])))
+			allKeysHexs[tid] = append(allKeysHexs[tid], keyHex...)
+			allKeysHexsIndexs[tid] = append(allKeysHexsIndexs[tid], int32(len(allKeysHexs[tid])-1))
+			allValuesIndexs[tid] = append(allValuesIndexs[tid], int64(len(allValues[tid])))
+			allValues[tid] = append(allValues[tid], value...)
+			allValuesIndexs[tid] = append(allValuesIndexs[tid], int64(len(allValues[tid])-1))
+			// }
+			// } else if i >= end {
+			// 	break
+			// }
+		}
+		wg.Done()
+	}
+
+	for i := 0; i < nThread; i++ {
+		wg.Add(1)
+		go kernel(i)
+	}
+
+	keysHexs := make([]byte, 0, len(s.stateObjectsPending)*32)
+	keysHexsIndexs := make([]int32, 0, len(s.stateObjectsPending)*2)
+	values := make([]byte, 0, len(s.stateObjectsPending)*1000)
+	valuesIndexs := make([]int64, 0, len(s.stateObjectsPending)*2)
+
+	wg.Wait()
+	for i := 0; i < nThread; i++ {
+		nextKeysHexs := allKeysHexs[i]
+		nextKeysHexsIndexs := allKeysHexsIndexs[i]
+		nextValues := allValues[i]
+		nextValuesIndexs := allValuesIndexs[i]
+		offsetKeysHexs := len(keysHexs)
+		offsetValues := len(values)
+
+		if offsetKeysHexs != 0 || offsetValues != 0 {
+			for j := 0; j < len(nextKeysHexsIndexs); j++ {
+				nextKeysHexsIndexs[j] += int32(offsetKeysHexs)
+			}
+			for j := 0; j < len(nextValuesIndexs); j++ {
+				nextValuesIndexs[j] += int64(offsetValues)
+			}
+		}
+
+		keysHexs = append(keysHexs, nextKeysHexs...)
+		keysHexsIndexs = append(keysHexsIndexs, nextKeysHexsIndexs...)
+		values = append(values, nextValues...)
+		valuesIndexs = append(valuesIndexs, nextValuesIndexs...)
+	}
+
+	insert_num := len(keysHexsIndexs) / 2
+
+	collectEnd := time.Now()
+	fmt.Println("[Timer] GMPTIntermediateRoot() collect:", collectEnd.Sub(collectStart))
+
+	fmt.Printf("pre-allocate: %v, final %v\n", len(s.stateObjectsPending)*1000, len(values))
+
+	// TODO: Call cgo
+	cStart := time.Now()
+	hash := C.build_mpt_olc(
+		C.STATE_TRIE,
+		(*C.uchar)(unsafe.Pointer(&keysHexs[0])),
+		(*C.int)(unsafe.Pointer(&keysHexsIndexs[0])),
+		(*C.uchar)(unsafe.Pointer(&values[0])),
+		(*C.int64_t)(unsafe.Pointer(&valuesIndexs[0])),
+		(**C.uchar)(C.NULL),
+		C.int(insert_num))
+	cEnd := time.Now()
+	fmt.Println("[Timer] GMPTIntermediateRoot() cgo:", cEnd.Sub(cStart))
+	mySlice := C.GoBytes(unsafe.Pointer(hash), common.HashLength)
+	// const uint8_t *build_mpt_2phase(const uint8_t *keys_hexs, int *keys_hexs_indexs,
+	// 	const uint8_t *values_bytes,
+	// 	int64_t *values_bytes_indexs,
+	// 	const uint8_t **values_hps, int insert_num);
+	// fmt.Printf("GMPTIntermediateRoot() hash: %v\n", mySlice)
+	print("Hash: ")
+	for _, b := range mySlice {
+		fmt.Printf("%02x", b)
+	}
+	println()
+	ret := common.Hash{}
+	copy(ret[:], mySlice)
+	return ret
+}
+
 func (s *StateDB) GMPTIntermediateRoot() common.Hash {
 	// TODO: collect objects froms.stateObjectsPending
 	// TODO: transform into GMPT input organization
@@ -839,8 +972,9 @@ func (s *StateDB) GMPTIntermediateRoot() common.Hash {
 	//			Key: hash(key), Value: RLP(account)
 	// TODO: call GMPT
 	// NO prefetcher
-
 	// Timer
+
+	// tries := C.preprocess()
 	collectStart := time.Now()
 	keysHexs := make([]byte, 0, len(s.stateObjectsPending)*32)
 	keysHexsIndexs := make([]int32, 0, len(s.stateObjectsPending)*2)
@@ -864,10 +998,11 @@ func (s *StateDB) GMPTIntermediateRoot() common.Hash {
 		}
 	}
 	collectEnd := time.Now()
-	println("[Timer] GMPTIntermediateRoot() collect:", collectEnd.Sub(collectStart))
+	fmt.Println("[Timer] GMPTIntermediateRoot() collect:", collectEnd.Sub(collectStart))
 	// TODO: Call cgo
 	cStart := time.Now()
 	hash := C.build_mpt_olc(
+		C.STATE_TRIE,
 		(*C.uchar)(unsafe.Pointer(&keysHexs[0])),
 		(*C.int)(unsafe.Pointer(&keysHexsIndexs[0])),
 		(*C.uchar)(unsafe.Pointer(&values[0])),
@@ -875,13 +1010,18 @@ func (s *StateDB) GMPTIntermediateRoot() common.Hash {
 		(**C.uchar)(C.NULL),
 		C.int(insert_num))
 	cEnd := time.Now()
-	println("[Timer] GMPTIntermediateRoot() cgo:", cEnd.Sub(cStart))
+	fmt.Println("[Timer] GMPTIntermediateRoot() cgo:", cEnd.Sub(cStart))
 	mySlice := C.GoBytes(unsafe.Pointer(hash), common.HashLength)
 	// const uint8_t *build_mpt_2phase(const uint8_t *keys_hexs, int *keys_hexs_indexs,
 	// 	const uint8_t *values_bytes,
 	// 	int64_t *values_bytes_indexs,
 	// 	const uint8_t **values_hps, int insert_num);
-	fmt.Printf("GMPTIntermediateRoot() hash: %v\n", mySlice)
+	// fmt.Printf("GMPTIntermediateRoot() hash: %v\n", mySlice)
+	print("Hash: ")
+	for _, b := range mySlice {
+		fmt.Printf("%02x", b)
+	}
+	println()
 	ret := common.Hash{}
 	copy(ret[:], mySlice)
 	return ret

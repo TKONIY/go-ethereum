@@ -16,6 +16,10 @@
 
 package miner
 
+// #include "libgmpt.h"
+// #cgo LDFLAGS: -L. -lgmpt -L/usr/local/cuda/lib64 -lcudart -lstdc++ -lcryptopp -lm -L/usr/local/lib -ltbb -ltbbmalloc
+import "C"
+
 import (
 	"errors"
 	"fmt"
@@ -692,6 +696,7 @@ func (w *worker) resultLoop() {
 				continue
 			}
 			// Short circuit when receiving duplicate result caused by resubmitting.
+
 			if w.chain.HasBlock(block.Hash(), block.NumberU64()) {
 				continue
 			}
@@ -743,7 +748,7 @@ func (w *worker) resultLoop() {
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 			tResultLoopEnd := time.Now()
 
-			println("[Timer] ResultLoop: ", tResultLoopEnd.Sub(tResultLoopStart))
+			fmt.Println("[Timer] ResultLoop: ", tResultLoopEnd.Sub(tResultLoopStart))
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
 
@@ -1109,6 +1114,14 @@ func (w *worker) generateWork(params *generateParams) (*types.Block, error) {
 func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	start := time.Now()
 
+	// TODOAsync initialize GMPT
+	// println("start fill transactions and preprocess")
+	// ch := make(chan bool)
+	// go func() {
+	// 	C.preprocess()
+	// 	ch <- true
+	// }()
+
 	tCommitWorkStart := time.Now()
 
 	// Set the coinbase if the worker is running or it's required
@@ -1133,17 +1146,19 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 		w.commit(work.copy(), nil, false, start)
 	}
 
-	println("start fill transactions")
 	// Fill pending transactions from the txpool
 	err = w.fillTransactions(interrupt, work)
 	if errors.Is(err, errBlockInterruptedByNewHead) {
 		work.discard()
 		return
 	}
-	println("fill transactions finished, start commit")
-	tFillTransactionsFinish := time.Now()
-	println("[Timer] Fill transactions: ", tFillTransactionsFinish.Sub(tCommitWorkStart))
+	// success := <-ch
+	// fmt.Println("Prepress success: ", success)
 
+	tFillTransactionsFinish := time.Now()
+	fmt.Println("[Timer] Fill transactions and preprocess: ", tFillTransactionsFinish.Sub(tCommitWorkStart))
+
+	println("fill transactions finished, start commit")
 	w.commit(work.copy(), w.fullTaskHook, true, start)
 
 	// tCommitWorkFinish := time.Now()
@@ -1174,7 +1189,7 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 		block, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts)
 		tEnd := time.Now()
 		println("finish finalize and assemble")
-		println("[Timer] FianalizeAndAssemble", tEnd.Sub(tStart))
+		fmt.Println("[Timer] FianalizeAndAssemble", tEnd.Sub(tStart))
 		if err != nil {
 			return err
 		}
