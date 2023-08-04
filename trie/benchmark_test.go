@@ -20,6 +20,8 @@ import (
 )
 
 // !!! use TryGetHex and tryUpdateHex
+const read_flag bool = true
+const write_flag bool = false
 
 func random_select_read_data(keys [][]byte, record_num int, lookup_num int) (rkeys [][]byte) {
 	rand.Seed(time.Now().UnixNano())
@@ -323,6 +325,52 @@ func readYcsb(t *testing.T) (wkeys, wvalues, rkeys [][]byte) {
 	}
 	return wkeys, wvalues, rkeys
 }
+
+func readYcsbRW(t *testing.T, tsize int) (rwkeys, rwvalues, bkeys, bvalues [][]byte, rwflags []bool) {
+	path := "../../dataset/ycsb/data.txt"
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	i := 0
+	for scanner.Scan() {
+		line := scanner.Text()
+		opEnd := strings.IndexByte(line, ' ')
+		op := line[:opEnd]
+		remain := line[opEnd+1:]
+		if i < tsize {
+			assert.Equal(t, op, "INSERT")
+			kEnd := strings.IndexByte(remain, ' ')
+			key := remain[:kEnd]
+			value := remain[kEnd+1:]
+			bkeys = append(bkeys, keybytesToHex([]byte(key)))
+			bvalues = append(bvalues, []byte(value))
+		} else {
+		switch op {
+			case "INSERT":
+				kEnd := strings.IndexByte(remain, ' ')
+				key := remain[:kEnd]
+				value := remain[kEnd+1:]
+				rwkeys = append(rwkeys, keybytesToHex([]byte(key)))
+				rwvalues = append(rwvalues, []byte(value))
+				rwflags = append(rwflags, write_flag)
+			case "READ":
+				key := remain
+				value := "EOF"
+				rwkeys = append(rwkeys, keybytesToHex([]byte(key)))
+				rwvalues = append(rwvalues, []byte(value))
+				rwflags = append(rwflags, read_flag)
+			default:
+				t.Fatalf("Wrong operation %v\n", op)
+			}
+		}
+		i++
+	}
+	return rwkeys, rwvalues, bkeys, bvalues, rwflags
+}
+
 func TestETEYCSBBench(t *testing.T) {
 	wkeys, wvalues, rkeys := readYcsb(t)
 	fmt.Printf("Insert %d kv-pairs, Read %d k\n", len(wkeys), len(rkeys))

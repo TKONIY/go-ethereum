@@ -330,6 +330,43 @@ func TestEthTrieSize(t *testing.T) {
 	fmt.Printf("Ethereum hash throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/hash_us, insert_num, 0)
 }
 
+func TestRW(t *testing.T) {
+	record_num := 100000
+	rwkeys, rwvalues, bkeys, bvalues, rwflags := readYcsbRW(t, record_num)
+
+	assert.Equal(t, len(rwkeys), len(rwvalues))
+	assert.Equal(t, len(rwkeys), len(rwflags))
+	assert.Equal(t, len(bkeys), len(bvalues))
+	rw_num := len(rwkeys)
+	triedb := NewDatabase(rawdb.NewMemoryDatabase())
+	trie := NewEmpty(triedb)
+	valuesGet := make([][]byte, rw_num)
+	for i := 0; i < record_num; i++ {
+		trie.tryUpdateHex(bkeys[i], bvalues[i])
+	}
+	hash := trie.Hash()
+	fmt.Printf("Ethereum old hash result: %v\n", hash)
+	read_num := 0
+	t1 := time.Now()
+	for i := 0; i < rw_num; i++ {
+		if rwflags[i] == read_flag {
+			valueGet, _ := trie.TryGetHex(rwkeys[i])
+			valuesGet[read_num] = valueGet
+			read_num += 1
+		} else if rwflags[i] == write_flag {
+			trie.tryUpdateHex(rwkeys[i], rwvalues[i])
+		} else {
+			panic("wrong flag")
+		}
+	}
+	t2 := time.Now()
+	us := t2.Sub(t1).Microseconds()
+	hash = trie.Hash()
+	fmt.Printf("Ethereum new hash result: %v\n", hash)
+	fmt.Printf("valuesGet num: %d\n", read_num)
+	fmt.Printf("Ethereum rw throughput: %d qps for %d operations and trie with %d records\n", int64(rw_num)*1000000/us, rw_num, 0)
+}
+
 func TestKeccak256(t *testing.T) {
 	
 }
