@@ -815,6 +815,7 @@ func (db *Database) Update(nodes *MergedNodeSet) error {
 			}
 			if account.Root != emptyRoot {
 				db.reference(account.Root, n.parent)
+				fmt.Printf("Unexpected db.reference: account.Root")
 			}
 		}
 	}

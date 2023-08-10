@@ -21,11 +21,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
+	"reflect"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
@@ -45,6 +48,10 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 	lru "github.com/hashicorp/golang-lru"
 )
+
+// #include "libgmpt.h"
+// #cgo LDFLAGS: -L. -lgmpt -L/usr/local/cuda/lib64 -lcudart -lstdc++ -lcryptopp -lm -L/usr/local/lib -ltbb -ltbbmalloc
+import "C"
 
 var (
 	headBlockGauge          = metrics.NewRegisteredGauge("chain/head/block", nil)
@@ -1246,6 +1253,70 @@ func (bc *BlockChain) writeKnownBlock(block *types.Block) error {
 	return nil
 }
 
+func (bc *BlockChain) gmptCommitTrieDB(state *state.StateDB, root common.Hash) error {
+	// TODO: set stateObjectsDirty to empty
+	state.ClearStateObjectsDirty()
+	// TODO: return node set
+	fmt.Println("Get dirty nodes")
+	set := C.get_all_nodes(
+		C.STATE_TRIE,
+		(*C.uchar)(unsafe.Pointer(&state.AllKeysHexs[0])),
+		(*C.int)(unsafe.Pointer(&state.AllKeysHexsIndexs[0])),
+		C.int(state.AllKeysNums))
+	// TODO: commit db
+	triedb := bc.stateCache.TrieDB()
+	batch := triedb.DiskDB().NewBatch()
+
+	// n nodes
+	nNodes := int(set.num)
+	fmt.Println("nNodes: ", nNodes)
+
+	// turns to go slices
+	var encIndexs []C.ulonglong
+	header := (*reflect.SliceHeader)(unsafe.Pointer(&encIndexs))
+	header.Cap = nNodes * 2
+	header.Len = nNodes * 2
+	header.Data = uintptr(unsafe.Pointer(set.encs_indexs))
+
+	// encoding array size
+	encSizeSum := encIndexs[nNodes*2-1] + 1
+	if encSizeSum > math.MaxInt32 {
+		panic("encoding size too large")
+	}
+
+	hashsBytes := C.GoBytes(unsafe.Pointer(set.hashs), C.int(32*set.num))
+	encBytes := C.GoBytes(unsafe.Pointer(set.encs), C.int(encSizeSum))
+
+	for i := 0; i < int(set.num); i++ {
+		// fmt.Printf("Commit node %d\n", i)
+		istart := int(encIndexs[i*2])
+		iend := int(encIndexs[i*2+1])
+		enc := encBytes[istart : iend+1]
+		hash := hashsBytes[i*32 : i*32+32]
+
+		// var account types.StateAccount
+		// if err := rlp.DecodeBytes(enc, &account); err != nil {
+		// panic(err)
+		// }
+		// fmt.Printf("account %v", account)
+		rawdb.WriteTrieNode(batch, common.BytesToHash(hash), enc)
+	}
+	if err := batch.Write(); err != nil {
+		panic(err)
+	}
+	// rawdb.WriteTrieNode(batch, hash, nodeRlp)
+	// TODO: open trie
+	newTrie, err := state.Database().OpenTrie(root)
+	if err != nil {
+		panic(err)
+	}
+	state.SetTrie(newTrie)
+
+	balance := state.GetBalance(common.HexToAddress("0x498b859d2e59958e209d7dd262324c8d31b12b12"))
+	fmt.Println("balance: ", balance)
+	return nil
+}
+
 // writeBlockWithState writes block, metadata and corresponding state data to the
 // database.
 func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, state *state.StateDB) error {
@@ -1270,19 +1341,32 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		log.Crit("Failed to write block into disk", "err", err)
 	}
 	// Commit all cached state changes into underlying memory database.
-	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number()))
-	// TODO: set stateObjectsDirty to empty
-	// TODO: return node set
+	root := common.Hash{}
 
-	if err != nil {
-		return err
+	if !state.UseGMPT { // use geth
+		// fmt.Println("Root in header: ", block.Header().Root.Hex())
+		rootInner, err := state.Commit(bc.chainConfig.IsEIP158(block.Number()))
+		if err != nil {
+			return err
+		}
+		fmt.Println("Root in state:", root.Hex())
+		root = rootInner
+	} else {
+		root = block.Header().Root
 	}
+
 	triedb := bc.stateCache.TrieDB()
 
 	// If we're running an archive node, always flush
 	if bc.cacheConfig.TrieDirtyDisabled {
-		return triedb.Commit(root, false, nil)
+		if !state.UseGMPT {
+			// if true {
+			return triedb.Commit(root, false, nil)
+		} else {
+			return bc.gmptCommitTrieDB(state, root)
+		}
 	} else {
+		fmt.Println("Unexpected: triedb is not commited")
 		// Full but not archive node, do proper garbage collection
 		triedb.Reference(root, common.Hash{}) // metadata reference to keep trie alive
 		bc.triegc.Push(root, -int64(block.NumberU64()))

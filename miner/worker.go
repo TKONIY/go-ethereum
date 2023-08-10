@@ -535,6 +535,7 @@ func (w *worker) mainLoop() {
 		select {
 		case req := <-w.newWorkCh:
 			// TODO: entry
+			time.Sleep(1 * time.Second)
 			println("mainLoop: before commitWork")
 			w.commitWork(req.interrupt, req.noempty, req.timestamp)
 
@@ -1115,11 +1116,11 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	start := time.Now()
 
 	// TODOAsync initialize GMPT
-	// println("start fill transactions and preprocess")
+	println("start fill transactions and preprocess")
 	// ch := make(chan bool)
 	// go func() {
-	// 	C.preprocess()
-	// 	ch <- true
+	C.preprocess()
+	// ch <- true
 	// }()
 
 	tCommitWorkStart := time.Now()
@@ -1154,6 +1155,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	}
 	// success := <-ch
 	// fmt.Println("Prepress success: ", success)
+	fmt.Println("Prepress success:")
 
 	tFillTransactionsFinish := time.Now()
 	fmt.Println("[Timer] Fill transactions and preprocess: ", tFillTransactionsFinish.Sub(tCommitWorkStart))
@@ -1208,9 +1210,9 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 			}
 		}
 	}
-	if update {
-		w.updateSnapshot(env)
-	}
+	// if update {
+	// 	w.updateSnapshot(env)
+	// }
 	return nil
 }
 

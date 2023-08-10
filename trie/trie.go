@@ -182,6 +182,7 @@ func (t *Trie) TryGetHexParallel(keys, values [][]byte, n int) {
 }
 
 func (t *Trie) tryGet(origNode node, key []byte, pos int) (value []byte, newnode node, didResolve bool, err error) {
+	// fmt.Printf("originNode: %v\n", origNode)
 	switch n := (origNode).(type) {
 	case nil:
 		return nil, nil, false, nil
@@ -323,6 +324,7 @@ func (t *Trie) TryUpdate(key, value []byte) error {
 func (t *Trie) tryUpdate(key, value []byte) error {
 	t.unhashed++
 	k := keybytesToHex(key)
+	// fmt.Printf("key hex: %v\n", k)
 	if len(value) != 0 {
 		_, n, err := t.insert(t.root, nil, k, valueNode(value))
 		if err != nil {

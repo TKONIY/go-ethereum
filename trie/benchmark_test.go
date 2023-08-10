@@ -32,7 +32,7 @@ func random_select_read_data(keys [][]byte, record_num int, lookup_num int) (rke
 }
 
 func data_gen() (keys_bytes, values_bytes []*bytes.Buffer) {
-	n := 1 << 16
+	n := 2
 	value_size := 10000
 
 	keys_bytes = make([]*bytes.Buffer, n)
@@ -115,6 +115,25 @@ func TestPutBenchmark(t *testing.T) {
 	n := int64(len(keys))
 
 	fmt.Printf("Ethereum put execution time %d us, throughput %d qps\n", duration.Microseconds(), n*1000/duration.Microseconds()*1000)
+}
+
+func TestTrieDBCommit(t *testing.T) {
+	triedb := NewDatabase(rawdb.NewMemoryDatabase())
+	trie := NewEmpty(triedb)
+	keys, values := data_gen()
+	for i := range keys {
+		trie.Update(keys[i].Bytes(), values[i].Bytes())
+		fmt.Printf("key %v, value %v...\n", keys[i].Bytes(), values[i].Bytes()[:2])
+	}
+	root, nodeset, err := trie.Commit(true)
+	// node set 存储了:
+	// 路径 ->inner node
+	// [<leaf node, parent hash>]
+	if err != nil {
+		t.Fatal(err)
+	}
+	triedb.Update(NewWithNodeSet(nodeset))
+	triedb.Commit(root, true, nil)
 }
 
 func TestHashBenchmark(t *testing.T) {
@@ -393,7 +412,7 @@ func TestETEEthtxnBench(t *testing.T) {
 			// trie.insert(trie.root, nil, keys[i], valueNode(values[i]))
 		}
 		t2 := time.Now()
-		// trie.Hash()
+		trie.Hash()
 		t3 := time.Now()
 		trie.TryGetHexParallel(keys, valuesGet, n)
 		t4 := time.Now()
@@ -406,4 +425,61 @@ func TestETEEthtxnBench(t *testing.T) {
 		fmt.Printf("Ethereum Parallel execution time %d us, throughput %d qps [put: %d us] [hash: %d us] [get: %d us]\n", duration.Microseconds(), int64(n)*1000.0/duration.Microseconds()*1000.0, t2.Sub(t1).Microseconds(), t3.Sub(t2).Microseconds(), t4.Sub(t3).Microseconds())
 	}
 
+}
+
+func TestRLP(t *testing.T) {
+	// value node
+	vnode := valueNode([]byte("hello"))
+	encVnode := nodeToBytes(vnode)
+	fmt.Printf("value node: %v\n", encVnode)
+	fmt.Printf("value node: %v\n", []byte("hello"))
+	fnode := fullNode{}
+	fnode.Children[1] = vnode
+	encFnode := nodeToBytes(&fnode)
+	fmt.Printf("full node: %v\n", encFnode)
+}
+
+func TestEthtxnRLP(t *testing.T) {
+	keys, values := readEthtxn(t)
+	fmt.Println(len(keys), len(values))
+	n := 10
+	fmt.Printf("howmuch%d\n", n)
+	fmt.Printf("max procs %v\n", runtime.GOMAXPROCS(0))
+
+	{
+		triedb := NewDatabase(rawdb.NewMemoryDatabase())
+		trie := NewEmpty(triedb)
+		// n := len(keys)
+		valuesGet := make([][]byte, n)
+
+		t1 := time.Now()
+		for i := 0; i < n; i++ {
+			// trie.Update(keys[i], values[i])
+			trie.tryUpdateHex(keys[i], values[i])
+			// trie.insert(trie.root, nil, keys[i], valueNode(values[i]))
+		}
+		t2 := time.Now()
+		hash := trie.Hash()
+		fmt.Printf("root hash: %v\n", hash.Hex())
+		t3 := time.Now()
+		trie.TryGetHexParallel(keys, valuesGet, n)
+		t4 := time.Now()
+		for i := range valuesGet {
+			// fmt.Printf("%v\n%v\n\n", string(valuesGet[i]), string(values[i]))
+			assert.Equal(t, string(valuesGet[i]), string(values[i]))
+		}
+
+		duration := t4.Sub(t1)
+		fmt.Printf("Ethereum Parallel execution time %d us, throughput %d qps [put: %d us] [hash: %d us] [get: %d us]\n", duration.Microseconds(), int64(n)*1000.0/duration.Microseconds()*1000.0, t2.Sub(t1).Microseconds(), t3.Sub(t2).Microseconds(), t4.Sub(t3).Microseconds())
+	}
+
+}
+func TestCompactAndHex(t *testing.T) {
+	// hex to compact and compact to hex
+	key := []byte("abcdefghigklmnopqrstuvwxyz")
+	keyhex := keybytesToHex(key)
+	fmt.Println(keyhex)
+	l := hexToCompactInPlace(keyhex)
+	keyhex2 := compactToHex(keyhex[:l])
+	fmt.Println(keyhex2)
 }

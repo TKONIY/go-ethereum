@@ -132,6 +132,21 @@ type StateDB struct {
 	StorageUpdated int
 	AccountDeleted int
 	StorageDeleted int
+
+	// cached for gpu mpt
+	AllKeysHexs       []byte
+	AllKeysHexsIndexs []int32
+	AllKeysNums       int
+
+	// Mode
+	UseGMPT bool
+}
+
+func (s *StateDB) ClearStateObjectsDirty() {
+	s.stateObjectsDirty = make(map[common.Address]struct{})
+}
+func (s *StateDB) SetTrie(trie Trie) {
+	s.trie = trie
 }
 
 // New creates a new state from a given trie.
@@ -937,6 +952,11 @@ func (s *StateDB) GMPTIntermediateRootMultiCore() common.Hash {
 
 	fmt.Printf("pre-allocate: %v, final %v\n", len(s.stateObjectsPending)*1000, len(values))
 
+	// cached keys Hexs
+	s.AllKeysHexs = keysHexs
+	s.AllKeysHexsIndexs = keysHexsIndexs
+	s.AllKeysNums = insert_num
+
 	// TODO: Call cgo
 	cStart := time.Now()
 	hash := C.build_mpt_olc(
@@ -955,13 +975,14 @@ func (s *StateDB) GMPTIntermediateRootMultiCore() common.Hash {
 	// 	int64_t *values_bytes_indexs,
 	// 	const uint8_t **values_hps, int insert_num);
 	// fmt.Printf("GMPTIntermediateRoot() hash: %v\n", mySlice)
-	print("Hash: ")
-	for _, b := range mySlice {
-		fmt.Printf("%02x", b)
-	}
-	println()
+	// print("Hash: ")
+	// for _, b := range mySlice {
+	// 	fmt.Printf("%02x", b)
+	// }
+	// println()
 	ret := common.Hash{}
 	copy(ret[:], mySlice)
+	fmt.Println("GMPTIntermediateRootMultiCore() hash:", ret.Hex())
 	return ret
 }
 
@@ -999,6 +1020,12 @@ func (s *StateDB) GMPTIntermediateRoot() common.Hash {
 	}
 	collectEnd := time.Now()
 	fmt.Println("[Timer] GMPTIntermediateRoot() collect:", collectEnd.Sub(collectStart))
+
+	// cached keys Hexs
+	s.AllKeysHexs = keysHexs
+	s.AllKeysHexsIndexs = keysHexsIndexs
+	s.AllKeysNums = insert_num
+
 	// TODO: Call cgo
 	cStart := time.Now()
 	hash := C.build_mpt_olc(
@@ -1110,6 +1137,10 @@ func (s *StateDB) clearJournalAndRefund() {
 		s.refund = 0
 	}
 	s.validRevisions = s.validRevisions[:0] // Snapshots can be created without journal entries
+}
+
+func (s *StateDB) SetHash(hash common.Hash) {
+	// TODO
 }
 
 // Commit writes the state to the underlying in-memory trie database.

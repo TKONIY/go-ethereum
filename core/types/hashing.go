@@ -231,13 +231,14 @@ func DeriveShaGMPTMultiCore(list DerivableList, tname string) common.Hash {
 	cEnd := time.Now()
 	fmt.Println("[Timer] GMPTIntermediateRoot() cgo:", cEnd.Sub(cStart))
 	mySlice := C.GoBytes(unsafe.Pointer(hash), common.HashLength)
-	print("Hash: ")
-	for _, b := range mySlice {
-		fmt.Printf("%02x", b)
-	}
-	println()
+	// print("Hash: ")
+	// for _, b := range mySlice {
+	// 	fmt.Printf("%02x", b)
+	// }
+	// println()
 	ret := common.Hash{}
 	copy(ret[:], mySlice)
+	fmt.Println("GMPTIntermediateRoot() hash:", ret.Hex())
 	return ret
 }
 
