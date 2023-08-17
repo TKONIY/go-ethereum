@@ -192,6 +192,9 @@ type worker struct {
 	eth         Backend
 	chain       *core.BlockChain
 
+	// state lock
+	stateLock sync.Mutex
+
 	// Feeds
 	pendingLogsFeed event.Feed
 
@@ -535,8 +538,11 @@ func (w *worker) mainLoop() {
 		select {
 		case req := <-w.newWorkCh:
 			// TODO: entry
-			time.Sleep(1 * time.Second)
+			// time.Sleep(10 * time.Second)
 			println("mainLoop: before commitWork")
+			println("state lock try lock")
+			w.stateLock.Lock()
+			println("state lock locked")
 			w.commitWork(req.interrupt, req.noempty, req.timestamp)
 
 		case req := <-w.getWorkCh:
@@ -755,7 +761,7 @@ func (w *worker) resultLoop() {
 
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
-
+			println("state lock unlocked")
 		case <-w.exitCh:
 			return
 		}
@@ -1119,7 +1125,8 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	println("start fill transactions and preprocess")
 	// ch := make(chan bool)
 	// go func() {
-	C.preprocess()
+	ret := C.preprocess()
+	fmt.Printf("Preprocess result %v", int32(ret))
 	// ch <- true
 	// }()
 

@@ -261,7 +261,7 @@ func TestGMPTTransactionProcessing(t *testing.T) {
 	)
 
 	// read data
-	readEthTxns(t, 20)
+	readEthTxns(t, 1000)
 	// for _, tx := range testTxList {
 	// 	fmt.Printf("tx: %v\n sender: %v\n", tx, tx.From.Load().(types.SigCache).From)
 	// }
@@ -307,6 +307,7 @@ func TestGMPTTransactionProcessing(t *testing.T) {
 		if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
 			t.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
 		}
+		w.stateLock.Unlock()
 	case <-time.After(10000 * time.Second): // Worker needs 1s to include new changes.
 		t.Fatalf("timeout")
 	}
