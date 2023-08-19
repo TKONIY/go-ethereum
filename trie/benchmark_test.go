@@ -66,6 +66,7 @@ const (
 	ETH
 	LOOKUP
 	TRIESIZE
+	RW
 )
 
 func get_record_num(dataset Dataset, t *testing.T) int {
@@ -81,6 +82,8 @@ func get_record_num(dataset Dataset, t *testing.T) int {
 		data_num_str = os.Getenv("GMPT_DATA_LOOKUP_VOLUME")
 	case TRIESIZE:
 		data_num_str = os.Getenv("GMPT_TRIESIZE")
+	case RW:
+		data_num_str = os.Getenv("GMPT_RW_RRATIO")
 	default:
 		t.Fatalf("Wrong Dataset Type\n")
 	}
@@ -209,8 +212,8 @@ func TestHashBenchmark(t *testing.T) {
 // }
 
 func readWikiFast(t *testing.T) (keys, values [][]byte) {
-	indexDir := "../../dataset/wiki/index/"
-	valueDir := "../../dataset/wiki/value/"
+	indexDir := "/wiki/index/"
+	valueDir := "/wiki/value/"
 	indexFiles, err := os.ReadDir(indexDir)
 	if err != nil {
 		t.Fatal(err)
@@ -315,8 +318,8 @@ func TestHashWikiBench(t *testing.T) {
 	fmt.Printf("Ethereum hash execution time %d us, throughput %d qps\n", duration.Microseconds(), int64(n)*1000/duration.Microseconds()*1000)
 }
 
-func readYcsb(t *testing.T) (wkeys, wvalues, rkeys [][]byte) {
-	path := "../../dataset/ycsb/workloada.txt"
+func readYcsb(file_name string, t *testing.T) (wkeys, wvalues, rkeys [][]byte) {
+	path := "../../dataset/ycsb/" + file_name
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -345,8 +348,8 @@ func readYcsb(t *testing.T) (wkeys, wvalues, rkeys [][]byte) {
 	return wkeys, wvalues, rkeys
 }
 
-func readYcsbRW(t *testing.T, tsize int) (rwkeys, rwvalues, bkeys, bvalues [][]byte, rwflags []bool) {
-	path := "../../dataset/ycsb/data.txt"
+func readYcsbRW(t *testing.T, tsize, ratio int) (rwkeys, rwvalues, bkeys, bvalues [][]byte, rwflags []bool) {
+	path := "../../dataset/ycsb/ycsb_r" + strconv.Itoa(ratio)+ ".txt"
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -391,7 +394,7 @@ func readYcsbRW(t *testing.T, tsize int) (rwkeys, rwvalues, bkeys, bvalues [][]b
 }
 
 func TestETEYCSBBench(t *testing.T) {
-	wkeys, wvalues, rkeys := readYcsb(t)
+	wkeys, wvalues, rkeys := readYcsb("ycsb_insert_read.txt", t)
 	fmt.Printf("Insert %d kv-pairs, Read %d k\n", len(wkeys), len(rkeys))
 
 	triedb := NewDatabase(rawdb.NewMemoryDatabase())
