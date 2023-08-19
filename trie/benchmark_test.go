@@ -79,7 +79,7 @@ func get_record_num(dataset Dataset, t *testing.T) int {
 		data_num_str = os.Getenv("GMPT_ETH_DATA_VOLUME")
 	case LOOKUP:
 		data_num_str = os.Getenv("GMPT_DATA_LOOKUP_VOLUME")
-	case TRIESIZE: 
+	case TRIESIZE:
 		data_num_str = os.Getenv("GMPT_TRIESIZE")
 	default:
 		t.Fatalf("Wrong Dataset Type\n")
@@ -367,7 +367,7 @@ func readYcsbRW(t *testing.T, tsize int) (rwkeys, rwvalues, bkeys, bvalues [][]b
 			bkeys = append(bkeys, keybytesToHex([]byte(key)))
 			bvalues = append(bvalues, []byte(value))
 		} else {
-		switch op {
+			switch op {
 			case "INSERT":
 				kEnd := strings.IndexByte(remain, ' ')
 				key := remain[:kEnd]
@@ -470,14 +470,15 @@ func TestETEEthtxnBench(t *testing.T) {
 			// trie.insert(trie.root, nil, keys[i], valueNode(values[i]))
 		}
 		t2 := time.Now()
-		trie.Hash()
+		hash := trie.Hash()
 		t3 := time.Now()
 		trie.TryGetHexParallel(keys, valuesGet, n)
 		t4 := time.Now()
 		for i := range valuesGet {
-			fmt.Printf("%v\n%v\n\n", string(valuesGet[i]), string(values[i]))
+			// fmt.Printf("%v\n%v\n\n", string(valuesGet[i]), string(values[i]))
 			assert.Equal(t, string(valuesGet[i]), string(values[i]))
 		}
+		fmt.Printf("hash = %v\n", hash)
 
 		duration := t4.Sub(t1)
 		fmt.Printf("Ethereum Parallel execution time %d us, throughput %d qps [put: %d us] [hash: %d us] [get: %d us]\n", duration.Microseconds(), int64(n)*1000.0/duration.Microseconds()*1000.0, t2.Sub(t1).Microseconds(), t3.Sub(t2).Microseconds(), t4.Sub(t3).Microseconds())
@@ -517,7 +518,7 @@ func TestRLP(t *testing.T) {
 func TestEthtxnRLP(t *testing.T) {
 	keys, values := readEthtxn(t)
 	fmt.Println(len(keys), len(values))
-	n := 10
+	n := 64
 	fmt.Printf("howmuch%d\n", n)
 	fmt.Printf("max procs %v\n", runtime.GOMAXPROCS(0))
 
