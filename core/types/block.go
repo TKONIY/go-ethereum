@@ -199,8 +199,8 @@ func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*
 	if len(txs) == 0 {
 		b.header.TxHash = EmptyRootHash
 	} else {
-		if len(txs) < 10 { // use GMPT
-			// if true { // use GETH
+		// if len(txs) < 10 { // use GMPT
+		if true { // use GETH
 			fmt.Printf("Use Geth's DeriveSha for transaction trie\n")
 			b.header.TxHash = DeriveSha(Transactions(txs), hasher)
 		} else {
@@ -214,8 +214,8 @@ func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*
 	if len(receipts) == 0 {
 		b.header.ReceiptHash = EmptyRootHash
 	} else {
-		if len(txs) < 10 { // use GMPT
-			// if true { // use GETH
+		// if len(txs) < 10 { // use GMPT
+		if true { // use GETH
 			fmt.Printf("Use Geth's DeriveSha for receipt trie\n")
 			b.header.ReceiptHash = DeriveSha(Receipts(receipts), hasher)
 		} else {

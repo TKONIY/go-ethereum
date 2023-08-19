@@ -253,6 +253,18 @@ func TestGMPTNewGMPTTx(t *testing.T) {
 	fmt.Printf("tx: %v\n", tx)
 }
 
+func get_txn_num(t *testing.T) int {
+	data_num_str := os.Getenv("CASE_ETHT_DATA_VOLUME")
+	if len(data_num_str) == 0 {
+		t.Fatalf("Failed to get the env variable")
+	}
+	if n, err := strconv.Atoi(data_num_str); err != nil {
+		t.Fatalf("Number Error: %s", data_num_str)
+		return -1
+	} else {
+		return n
+	}
+}
 func TestGMPTTransactionProcessing(t *testing.T) {
 	var (
 		engine      consensus.Engine
@@ -261,7 +273,9 @@ func TestGMPTTransactionProcessing(t *testing.T) {
 	)
 
 	// read data
-	readEthTxns(t, 1000)
+	ntxn := get_txn_num(t)
+	// ntxn := 640000
+	readEthTxns(t, ntxn)
 	// for _, tx := range testTxList {
 	// 	fmt.Printf("tx: %v\n sender: %v\n", tx, tx.From.Load().(types.SigCache).From)
 	// }

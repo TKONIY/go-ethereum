@@ -540,7 +540,7 @@ func (w *worker) mainLoop() {
 			// TODO: entry
 			// time.Sleep(10 * time.Second)
 			println("mainLoop: before commitWork")
-			println("state lock try lock")
+			println("state lock try locked")
 			w.stateLock.Lock()
 			println("state lock locked")
 			w.commitWork(req.interrupt, req.noempty, req.timestamp)
@@ -1122,11 +1122,11 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	start := time.Now()
 
 	// TODOAsync initialize GMPT
-	println("start fill transactions and preprocess")
+	// println("start fill transactions and preprocess")
 	// ch := make(chan bool)
 	// go func() {
-	ret := C.preprocess()
-	fmt.Printf("Preprocess result %v", int32(ret))
+	// ret := C.preprocess()
+	// fmt.Printf("Preprocess result %v", int32(ret))
 	// ch <- true
 	// }()
 
@@ -1169,6 +1169,11 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 
 	println("fill transactions finished, start commit")
 	w.commit(work.copy(), w.fullTaskHook, true, start)
+	if len(work.txs) == 0 {
+		fmt.Println("Empty txn sets, try unlock state lock")
+		w.stateLock.Unlock()
+		fmt.Println("Empty txn sets, state lock unlocked")
+	}
 
 	// tCommitWorkFinish := time.Now()
 	println("commit work finished")

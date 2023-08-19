@@ -604,8 +604,8 @@ func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.
 	start := time.Now()
 	println(len(txs))
 
-	if len(txs) < 10 { // use gmpt
-		// if true { 			// use geth totally
+	// if len(txs) < 10 { // use gmpt
+	if true {
 		println("Use Geth's intermediateROOT!!!!")
 		state.UseGMPT = false
 		header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))

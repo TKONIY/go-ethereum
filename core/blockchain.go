@@ -1349,8 +1349,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		if err != nil {
 			return err
 		}
-		fmt.Println("Root in state:", root.Hex())
 		root = rootInner
+		fmt.Println("Root in state:", root.Hex())
 	} else {
 		root = block.Header().Root
 	}
