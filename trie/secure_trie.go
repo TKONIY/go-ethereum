@@ -89,12 +89,12 @@ func (t *StateTrie) Get(key []byte) []byte {
 // The value bytes must not be modified by the caller.
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *StateTrie) TryGet(key []byte) ([]byte, error) {
-	return t.trie.TryGet(t.hashKey(key))
+	return t.trie.TryGet(t.HashKey(key))
 }
 
 func (t *StateTrie) TryGetAccount(key []byte) (*types.StateAccount, error) {
 	var ret types.StateAccount
-	res, err := t.trie.TryGet(t.hashKey(key))
+	res, err := t.trie.TryGet(t.HashKey(key))
 	if err != nil {
 		log.Error(fmt.Sprintf("Unhandled trie error: %v", err))
 		return &ret, err
@@ -132,7 +132,7 @@ func (t *StateTrie) TryGetNode(path []byte) ([]byte, int, error) {
 // TryUpdateAccount account will abstract the write of an account to the
 // secure trie.
 func (t *StateTrie) TryUpdateAccount(key []byte, acc *types.StateAccount) error {
-	hk := t.hashKey(key)
+	hk := t.HashKey(key)
 	data, err := rlp.EncodeToBytes(acc)
 	if err != nil {
 		return err
@@ -165,7 +165,7 @@ func (t *StateTrie) Update(key, value []byte) {
 //
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *StateTrie) TryUpdate(key, value []byte) error {
-	hk := t.hashKey(key)
+	hk := t.HashKey(key)
 	err := t.trie.TryUpdate(hk, value)
 	if err != nil {
 		return err
@@ -184,14 +184,14 @@ func (t *StateTrie) Delete(key []byte) {
 // TryDelete removes any existing value for key from the trie.
 // If a node was not found in the database, a MissingNodeError is returned.
 func (t *StateTrie) TryDelete(key []byte) error {
-	hk := t.hashKey(key)
+	hk := t.HashKey(key)
 	delete(t.getSecKeyCache(), string(hk))
 	return t.trie.TryDelete(hk)
 }
 
 // TryDeleteACcount abstracts an account deletion from the trie.
 func (t *StateTrie) TryDeleteAccount(key []byte) error {
-	hk := t.hashKey(key)
+	hk := t.HashKey(key)
 	delete(t.getSecKeyCache(), string(hk))
 	return t.trie.TryDelete(hk)
 }
@@ -252,10 +252,10 @@ func (t *StateTrie) NodeIterator(start []byte) NodeIterator {
 	return t.trie.NodeIterator(start)
 }
 
-// hashKey returns the hash of key as an ephemeral buffer.
+// HashKey returns the hash of key as an ephemeral buffer.
 // The caller must not hold onto the return value because it will become
-// invalid on the next call to hashKey or secKey.
-func (t *StateTrie) hashKey(key []byte) []byte {
+// invalid on the next call to HashKey or secKey.
+func (t *StateTrie) HashKey(key []byte) []byte {
 	h := newHasher(false)
 	h.sha.Reset()
 	h.sha.Write(key)

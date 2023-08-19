@@ -672,11 +672,11 @@ func (db *Database) Commit(node common.Hash, report bool, callback func(common.H
 	memcacheCommitSizeMeter.Mark(int64(storage - db.dirtiesSize))
 	memcacheCommitNodesMeter.Mark(int64(nodes - len(db.dirties)))
 
-	logger := log.Info
-	if !report {
-		logger = log.Debug
-	}
-	logger("Persisted trie from memory database", "nodes", nodes-len(db.dirties)+int(db.flushnodes), "size", storage-db.dirtiesSize+db.flushsize, "time", time.Since(start)+db.flushtime,
+	// logger := log.Info
+	// if !report {
+	// 	logger = log.Debug
+	// }
+	fmt.Println("Persisted trie from memory database", "nodes", nodes-len(db.dirties)+int(db.flushnodes), "size", storage-db.dirtiesSize+db.flushsize, "time", time.Since(start)+db.flushtime,
 		"gcnodes", db.gcnodes, "gcsize", db.gcsize, "gctime", db.gctime, "livenodes", len(db.dirties), "livesize", db.dirtiesSize)
 
 	// Reset the garbage collection statistics
@@ -685,6 +685,11 @@ func (db *Database) Commit(node common.Hash, report bool, callback func(common.H
 
 	return nil
 }
+
+// TODO
+// func (db *Database) gmptCommitStateTrie(batch ethdb.Batch, uncacher *cleaner) error {
+// 	// TODO
+// }
 
 // commit is the private locked version of Commit.
 func (db *Database) commit(hash common.Hash, batch ethdb.Batch, uncacher *cleaner, callback func(common.Hash)) error {
@@ -810,6 +815,7 @@ func (db *Database) Update(nodes *MergedNodeSet) error {
 			}
 			if account.Root != emptyRoot {
 				db.reference(account.Root, n.parent)
+				fmt.Printf("Unexpected db.reference: account.Root")
 			}
 		}
 	}

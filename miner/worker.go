@@ -16,6 +16,10 @@
 
 package miner
 
+// #include "libgmpt.h"
+// #cgo LDFLAGS: -L. -lgmpt -L/usr/local/cuda/lib64 -lcudart -lstdc++ -lcryptopp -lm -L/usr/local/lib -ltbb -ltbbmalloc
+import "C"
+
 import (
 	"errors"
 	"fmt"
@@ -85,8 +89,7 @@ var (
 // environment is the worker's current environment and holds all
 // information of the sealing block generation.
 type environment struct {
-	signer types.Signer
-
+	signer    types.Signer
 	state     *state.StateDB // apply state changes here
 	ancestors mapset.Set     // ancestor set (used for checking uncle parent validity)
 	family    mapset.Set     // family set (used for checking uncle invalidity)
@@ -188,6 +191,9 @@ type worker struct {
 	engine      consensus.Engine
 	eth         Backend
 	chain       *core.BlockChain
+
+	// state lock
+	stateLock sync.Mutex
 
 	// Feeds
 	pendingLogsFeed event.Feed
@@ -531,6 +537,12 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
+			// TODO: entry
+			// time.Sleep(10 * time.Second)
+			println("mainLoop: before commitWork")
+			println("state lock try locked")
+			w.stateLock.Lock()
+			println("state lock locked")
 			w.commitWork(req.interrupt, req.noempty, req.timestamp)
 
 		case req := <-w.getWorkCh:
@@ -686,10 +698,12 @@ func (w *worker) resultLoop() {
 		select {
 		case block := <-w.resultCh:
 			// Short circuit when receiving empty result.
+			tResultLoopStart := time.Now()
 			if block == nil {
 				continue
 			}
 			// Short circuit when receiving duplicate result caused by resubmitting.
+
 			if w.chain.HasBlock(block.Hash(), block.NumberU64()) {
 				continue
 			}
@@ -731,6 +745,7 @@ func (w *worker) resultLoop() {
 				logs = append(logs, receipt.Logs...)
 			}
 			// Commit block and state to database.
+			println("Result Loop: Commit block and state to database.")
 			_, err := w.chain.WriteBlockAndSetHead(block, receipts, logs, task.state, true)
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
@@ -738,13 +753,15 @@ func (w *worker) resultLoop() {
 			}
 			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
+			tResultLoopEnd := time.Now()
 
+			fmt.Println("[Timer] ResultLoop: ", tResultLoopEnd.Sub(tResultLoopStart))
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
 
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
-
+			println("state lock unlocked")
 		case <-w.exitCh:
 			return
 		}
@@ -843,6 +860,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	}
 	var coalescedLogs []*types.Log
 
+	txCount := 0
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -851,6 +869,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		// For the first two cases, the semi-finished work will be discarded.
 		// For the third case, the semi-finished work will be submitted to the consensus engine.
 		if interrupt != nil && atomic.LoadInt32(interrupt) != commitInterruptNone {
+			println("We do not want to enter into this shit")
 			// Notify resubmit loop to increase resubmitting interval due to too frequent commits.
 			if atomic.LoadInt32(interrupt) == commitInterruptResubmit {
 				ratio := float64(gasLimit-env.gasPool.Gas()) / float64(gasLimit)
@@ -868,24 +887,32 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		// If we don't have enough gas for any further transactions then we're done
 		if env.gasPool.Gas() < params.TxGas {
 			log.Trace("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
+			println("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
 			break
 		}
 		// Retrieve the next transaction and abort if all done
 		tx := txs.Peek()
 		if tx == nil {
+			fmt.Printf("Commited %v txs\n", txCount)
 			break
 		}
+		txCount++
+
+		// fmt.Printf("commit tx %v\n", tx.Hash())
+		// TODO: log and check
 		// Error may be ignored here. The error has already been checked
 		// during transaction acceptance is the transaction pool.
 		//
 		// We use the eip155 signer regardless of the current hf.
-		from, _ := types.Sender(env.signer, tx)
+		from, _ := types.Sender(env.signer, tx) // 这里的From和test中原本设置的from一样，即publickeytoaddress()
+		// fmt.Printf("commit tx %v from %v\n", tx.Hash(), from)
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
 		// phase, start ignoring the sender until we do.
 		if tx.Protected() && !w.chainConfig.IsEIP155(env.header.Number) {
 			log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.chainConfig.EIP155Block)
 
 			txs.Pop()
+			println("Ignoring reply protected transaction")
 			continue
 		}
 		// Start executing the transaction
@@ -991,9 +1018,10 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	header := &types.Header{
 		ParentHash: parent.Hash(),
 		Number:     num.Add(num, common.Big1),
-		GasLimit:   core.CalcGasLimit(parent.GasLimit(), w.config.GasCeil),
-		Time:       timestamp,
-		Coinbase:   genParams.coinbase,
+		// GasLimit:   core.CalcGasLimit(parent.GasLimit(), w.config.GasCeil),
+		GasLimit: w.config.GasCeil, // TODO: directly apply the config
+		Time:     timestamp,
+		Coinbase: genParams.coinbase,
 	}
 	if !genParams.noExtra && len(w.extra) != 0 {
 		header.Extra = w.extra
@@ -1065,6 +1093,7 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) error {
 		}
 	}
 	if len(remoteTxs) > 0 {
+		println("remoteTxs: ", len(remoteTxs))
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
 		if err := w.commitTransactions(env, txs, interrupt); err != nil {
 			return err
@@ -1091,6 +1120,17 @@ func (w *worker) generateWork(params *generateParams) (*types.Block, error) {
 // and submit them to the sealer.
 func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	start := time.Now()
+
+	// TODOAsync initialize GMPT
+	// println("start fill transactions and preprocess")
+	// ch := make(chan bool)
+	// go func() {
+	// ret := C.preprocess()
+	// fmt.Printf("Preprocess result %v", int32(ret))
+	// ch <- true
+	// }()
+
+	tCommitWorkStart := time.Now()
 
 	// Set the coinbase if the worker is running or it's required
 	var coinbase common.Address
@@ -1120,14 +1160,30 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 		work.discard()
 		return
 	}
-	w.commit(work.copy(), w.fullTaskHook, true, start)
+	// success := <-ch
+	// fmt.Println("Prepress success: ", success)
+	fmt.Println("Prepress success:")
 
+	tFillTransactionsFinish := time.Now()
+	fmt.Println("[Timer] Fill transactions and preprocess: ", tFillTransactionsFinish.Sub(tCommitWorkStart))
+
+	println("fill transactions finished, start commit")
+	w.commit(work.copy(), w.fullTaskHook, true, start)
+	if len(work.txs) == 0 {
+		fmt.Println("Empty txn sets, try unlock state lock")
+		w.stateLock.Unlock()
+		fmt.Println("Empty txn sets, state lock unlocked")
+	}
+
+	// tCommitWorkFinish := time.Now()
+	println("commit work finished")
 	// Swap out the old work with the new one, terminating any leftover
 	// prefetcher processes in the mean time and starting a new one.
 	if w.current != nil {
 		w.current.discard()
 	}
 	w.current = work
+	// println("[Timer] w.commit: ", tCommitWorkFinish.Sub(tFillTransactionsFinish))
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
@@ -1142,7 +1198,12 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 		// Create a local environment copy, avoid the data race with snapshot state.
 		// https://github.com/ethereum/go-ethereum/issues/24299
 		env := env.copy()
+		println("start finalize and assemble")
+		tStart := time.Now()
 		block, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts)
+		tEnd := time.Now()
+		println("finish finalize and assemble")
+		fmt.Println("[Timer] FianalizeAndAssemble", tEnd.Sub(tStart))
 		if err != nil {
 			return err
 		}
@@ -1161,9 +1222,9 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 			}
 		}
 	}
-	if update {
-		w.updateSnapshot(env)
-	}
+	// if update {
+	// 	w.updateSnapshot(env)
+	// }
 	return nil
 }
 

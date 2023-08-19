@@ -55,7 +55,7 @@ type Transaction struct {
 	// caches
 	hash atomic.Value
 	size atomic.Value
-	from atomic.Value
+	From atomic.Value
 }
 
 // NewTx creates a new transaction.
@@ -613,9 +613,9 @@ func (tx *Transaction) AsMessage(s Signer, baseFee *big.Int) (Message, error) {
 	msg := Message{
 		nonce:      tx.Nonce(),
 		gasLimit:   tx.Gas(),
-		gasPrice:   new(big.Int).Set(tx.GasPrice()),
-		gasFeeCap:  new(big.Int).Set(tx.GasFeeCap()),
-		gasTipCap:  new(big.Int).Set(tx.GasTipCap()),
+		gasPrice:   new(big.Int).Set(tx.GasPrice()),  // TODO: whether
+		gasFeeCap:  new(big.Int).Set(tx.GasFeeCap()), // TODO: what
+		gasTipCap:  new(big.Int).Set(tx.GasTipCap()), // TODO: what
 		to:         tx.To(),
 		amount:     tx.Value(),
 		data:       tx.Data(),

@@ -21,8 +21,11 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"runtime"
 	"sort"
+	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -34,6 +37,10 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
+
+// #include "libgmpt.h"
+// #cgo LDFLAGS: -L. -lgmpt -L/usr/local/cuda/lib64 -lcudart -lstdc++ -lcryptopp -lm -L/usr/local/lib -ltbb -ltbbmalloc
+import "C"
 
 type revision struct {
 	id           int
@@ -125,6 +132,21 @@ type StateDB struct {
 	StorageUpdated int
 	AccountDeleted int
 	StorageDeleted int
+
+	// cached for gpu mpt
+	AllKeysHexs       []byte
+	AllKeysHexsIndexs []int32
+	AllKeysNums       int
+
+	// Mode
+	UseGMPT bool
+}
+
+func (s *StateDB) ClearStateObjectsDirty() {
+	s.stateObjectsDirty = make(map[common.Address]struct{})
+}
+func (s *StateDB) SetTrie(trie Trie) {
+	s.trie = trie
 }
 
 // New creates a new state from a given trie.
@@ -600,8 +622,8 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 // CreateAccount is called during the EVM CREATE operation. The situation might arise that
 // a contract does the following:
 //
-//   1. sends funds to sha(account ++ (nonce + 1))
-//   2. tx_create(sha(account ++ nonce)) (note that this gets the address of 1)
+//  1. sends funds to sha(account ++ (nonce + 1))
+//  2. tx_create(sha(account ++ nonce)) (note that this gets the address of 1)
 //
 // Carrying over the balance ensures that Ether doesn't disappear.
 func (s *StateDB) CreateAccount(addr common.Address) {
@@ -816,6 +838,222 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 	s.clearJournalAndRefund()
 }
 
+func keybytesToHex(str []byte) []byte {
+	l := len(str)*2 + 1
+	var nibbles = make([]byte, l)
+	for i, b := range str {
+		nibbles[i*2] = b / 16
+		nibbles[i*2+1] = b % 16
+	}
+	nibbles[l-1] = 16
+	return nibbles
+}
+
+func (s *StateDB) GMPTIntermediateRootMultiCore() common.Hash {
+	collectStart := time.Now()
+
+	nThread := runtime.GOMAXPROCS(0) / 2
+	wg := sync.WaitGroup{}
+
+	allKeysHexs := make([][]byte, nThread)
+	allKeysHexsIndexs := make([][]int32, nThread)
+	allValues := make([][]byte, nThread)
+	allValuesIndexs := make([][]int64, nThread)
+
+	type tuple struct {
+		addr common.Address
+		obj  *stateObject
+	}
+	stateObjectsPending := make([]tuple, 0, len(s.stateObjectsPending))
+	for addr := range s.stateObjectsPending {
+		if obj := s.stateObjects[addr]; !obj.deleted {
+			stateObjectsPending = append(stateObjectsPending, tuple{addr, obj})
+		}
+	}
+
+	kernel := func(tid int) {
+
+		l := len(stateObjectsPending)
+		st := tid * (l / nThread)
+		end := (tid + 1) * (l / nThread)
+		if tid == nThread-1 {
+			end = l
+		}
+
+		allKeysHexs[tid] = make([]byte, 0, (end-st)*32)
+		allKeysHexsIndexs[tid] = make([]int32, 0, (end-st)*2)
+		allValues[tid] = make([]byte, 0, (end-st)*1000)
+		allValuesIndexs[tid] = make([]int64, 0, (end-st)*2)
+
+		// for addr := range s.stateObjectsPending {
+		// 	if i >= st && i < end {
+		// 		// TODO: do it
+		// 		if obj := s.stateObjects[addr]; !obj.deleted {
+		for i := st; i < end; i++ {
+			addr := stateObjectsPending[i].addr
+			obj := stateObjectsPending[i].obj
+			keyHex := keybytesToHex(s.trie.(*trie.StateTrie).HashKey(addr[:]))
+			value, err := rlp.EncodeToBytes(&obj.data)
+			if err != nil {
+				panic(err)
+			}
+			allKeysHexsIndexs[tid] = append(allKeysHexsIndexs[tid], int32(len(allKeysHexs[tid])))
+			allKeysHexs[tid] = append(allKeysHexs[tid], keyHex...)
+			allKeysHexsIndexs[tid] = append(allKeysHexsIndexs[tid], int32(len(allKeysHexs[tid])-1))
+			allValuesIndexs[tid] = append(allValuesIndexs[tid], int64(len(allValues[tid])))
+			allValues[tid] = append(allValues[tid], value...)
+			allValuesIndexs[tid] = append(allValuesIndexs[tid], int64(len(allValues[tid])-1))
+			// }
+			// } else if i >= end {
+			// 	break
+			// }
+		}
+		wg.Done()
+	}
+
+	for i := 0; i < nThread; i++ {
+		wg.Add(1)
+		go kernel(i)
+	}
+
+	keysHexs := make([]byte, 0, len(s.stateObjectsPending)*32)
+	keysHexsIndexs := make([]int32, 0, len(s.stateObjectsPending)*2)
+	values := make([]byte, 0, len(s.stateObjectsPending)*1000)
+	valuesIndexs := make([]int64, 0, len(s.stateObjectsPending)*2)
+
+	wg.Wait()
+	for i := 0; i < nThread; i++ {
+		nextKeysHexs := allKeysHexs[i]
+		nextKeysHexsIndexs := allKeysHexsIndexs[i]
+		nextValues := allValues[i]
+		nextValuesIndexs := allValuesIndexs[i]
+		offsetKeysHexs := len(keysHexs)
+		offsetValues := len(values)
+
+		if offsetKeysHexs != 0 || offsetValues != 0 {
+			for j := 0; j < len(nextKeysHexsIndexs); j++ {
+				nextKeysHexsIndexs[j] += int32(offsetKeysHexs)
+			}
+			for j := 0; j < len(nextValuesIndexs); j++ {
+				nextValuesIndexs[j] += int64(offsetValues)
+			}
+		}
+
+		keysHexs = append(keysHexs, nextKeysHexs...)
+		keysHexsIndexs = append(keysHexsIndexs, nextKeysHexsIndexs...)
+		values = append(values, nextValues...)
+		valuesIndexs = append(valuesIndexs, nextValuesIndexs...)
+	}
+
+	insert_num := len(keysHexsIndexs) / 2
+
+	collectEnd := time.Now()
+	fmt.Println("[Timer] GMPTIntermediateRoot() collect:", collectEnd.Sub(collectStart))
+
+	fmt.Printf("pre-allocate: %v, final %v\n", len(s.stateObjectsPending)*1000, len(values))
+
+	// cached keys Hexs
+	s.AllKeysHexs = keysHexs
+	s.AllKeysHexsIndexs = keysHexsIndexs
+	s.AllKeysNums = insert_num
+
+	// TODO: Call cgo
+	cStart := time.Now()
+	hash := C.build_mpt_olc(
+		C.STATE_TRIE,
+		(*C.uchar)(unsafe.Pointer(&keysHexs[0])),
+		(*C.int)(unsafe.Pointer(&keysHexsIndexs[0])),
+		(*C.uchar)(unsafe.Pointer(&values[0])),
+		(*C.int64_t)(unsafe.Pointer(&valuesIndexs[0])),
+		(**C.uchar)(C.NULL),
+		C.int(insert_num))
+	cEnd := time.Now()
+	fmt.Println("[Timer] GMPTIntermediateRoot() cgo:", cEnd.Sub(cStart))
+	mySlice := C.GoBytes(unsafe.Pointer(hash), common.HashLength)
+	// const uint8_t *build_mpt_2phase(const uint8_t *keys_hexs, int *keys_hexs_indexs,
+	// 	const uint8_t *values_bytes,
+	// 	int64_t *values_bytes_indexs,
+	// 	const uint8_t **values_hps, int insert_num);
+	// fmt.Printf("GMPTIntermediateRoot() hash: %v\n", mySlice)
+	// print("Hash: ")
+	// for _, b := range mySlice {
+	// 	fmt.Printf("%02x", b)
+	// }
+	// println()
+	ret := common.Hash{}
+	copy(ret[:], mySlice)
+	fmt.Println("GMPTIntermediateRootMultiCore() hash:", ret.Hex())
+	return ret
+}
+
+func (s *StateDB) GMPTIntermediateRoot() common.Hash {
+	// TODO: collect objects froms.stateObjectsPending
+	// TODO: transform into GMPT input organization
+	// TODO: ref: func(s *StateDB) updateStateObject(obj * stateObject)
+	//			Key: hash(key), Value: RLP(account)
+	// TODO: call GMPT
+	// NO prefetcher
+	// Timer
+
+	// tries := C.preprocess()
+	collectStart := time.Now()
+	keysHexs := make([]byte, 0, len(s.stateObjectsPending)*32)
+	keysHexsIndexs := make([]int32, 0, len(s.stateObjectsPending)*2)
+	values := make([]byte, 0, len(s.stateObjectsPending)*32)
+	valuesIndexs := make([]int64, 0, len(s.stateObjectsPending)*2)
+	insert_num := int(0)
+	for addr := range s.stateObjectsPending {
+		if obj := s.stateObjects[addr]; !obj.deleted {
+			keyHex := keybytesToHex(s.trie.(*trie.StateTrie).HashKey(addr[:]))
+			value, err := rlp.EncodeToBytes(&obj.data)
+			if err != nil {
+				panic(err)
+			}
+			keysHexsIndexs = append(keysHexsIndexs, int32(len(keysHexs)))
+			keysHexs = append(keysHexs, keyHex...)
+			keysHexsIndexs = append(keysHexsIndexs, int32(len(keysHexs)-1))
+			valuesIndexs = append(valuesIndexs, int64(len(values)))
+			values = append(values, value...)
+			valuesIndexs = append(valuesIndexs, int64(len(values)-1))
+			insert_num++
+		}
+	}
+	collectEnd := time.Now()
+	fmt.Println("[Timer] GMPTIntermediateRoot() collect:", collectEnd.Sub(collectStart))
+
+	// cached keys Hexs
+	s.AllKeysHexs = keysHexs
+	s.AllKeysHexsIndexs = keysHexsIndexs
+	s.AllKeysNums = insert_num
+
+	// TODO: Call cgo
+	cStart := time.Now()
+	hash := C.build_mpt_olc(
+		C.STATE_TRIE,
+		(*C.uchar)(unsafe.Pointer(&keysHexs[0])),
+		(*C.int)(unsafe.Pointer(&keysHexsIndexs[0])),
+		(*C.uchar)(unsafe.Pointer(&values[0])),
+		(*C.int64_t)(unsafe.Pointer(&valuesIndexs[0])),
+		(**C.uchar)(C.NULL),
+		C.int(insert_num))
+	cEnd := time.Now()
+	fmt.Println("[Timer] GMPTIntermediateRoot() cgo:", cEnd.Sub(cStart))
+	mySlice := C.GoBytes(unsafe.Pointer(hash), common.HashLength)
+	// const uint8_t *build_mpt_2phase(const uint8_t *keys_hexs, int *keys_hexs_indexs,
+	// 	const uint8_t *values_bytes,
+	// 	int64_t *values_bytes_indexs,
+	// 	const uint8_t **values_hps, int insert_num);
+	// fmt.Printf("GMPTIntermediateRoot() hash: %v\n", mySlice)
+	print("Hash: ")
+	for _, b := range mySlice {
+		fmt.Printf("%02x", b)
+	}
+	println()
+	ret := common.Hash{}
+	copy(ret[:], mySlice)
+	return ret
+}
+
 // IntermediateRoot computes the current root hash of the state trie.
 // It is called in between transactions to get the root hash that
 // goes into transaction receipts.
@@ -844,7 +1082,7 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	// to pull useful data from disk.
 	for addr := range s.stateObjectsPending {
 		if obj := s.stateObjects[addr]; !obj.deleted {
-			obj.updateRoot(s.db)
+			obj.updateRoot(s.db) // TODO: not updating, only prefetching
 		}
 	}
 	// Now we're about to start to write changes to the trie. The trie is so far
@@ -856,11 +1094,18 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 		}
 	}
 	usedAddrs := make([][]byte, 0, len(s.stateObjectsPending))
+
+	// TODO: the updateStateObject actually update the trie
+	// !! TODO: the updateStateObject actually update the trie
+	// TODO: the updateStateObject actually update the trie
+	// !! TODO: the updateStateObject actually update the trie
 	for addr := range s.stateObjectsPending {
 		if obj := s.stateObjects[addr]; obj.deleted {
+			println("UNEXPECTED: StateDB.IntermediateRoot() deleteStateObject()")
 			s.deleteStateObject(obj)
 			s.AccountDeleted += 1
 		} else {
+			// println("StateDB.IntermediateRoot() updateStateObject()")
 			s.updateStateObject(obj)
 			s.AccountUpdated += 1
 		}
@@ -894,8 +1139,13 @@ func (s *StateDB) clearJournalAndRefund() {
 	s.validRevisions = s.validRevisions[:0] // Snapshots can be created without journal entries
 }
 
+func (s *StateDB) SetHash(hash common.Hash) {
+	// TODO
+}
+
 // Commit writes the state to the underlying in-memory trie database.
 func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
+	println("StateDB.Commit()")
 	if s.dbErr != nil {
 		return common.Hash{}, fmt.Errorf("commit aborted due to earlier error: %v", s.dbErr)
 	}

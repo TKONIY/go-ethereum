@@ -56,12 +56,11 @@ var (
 	cliqueChainConfig *params.ChainConfig
 
 	// Test accounts
-	testBankKey, _  = crypto.GenerateKey()
-	testBankAddress = crypto.PubkeyToAddress(testBankKey.PublicKey)
-	testBankFunds   = big.NewInt(1000000000000000000)
-
-	testUserKey, _  = crypto.GenerateKey()
-	testUserAddress = crypto.PubkeyToAddress(testUserKey.PublicKey)
+	testBankKey, _   = crypto.GenerateKey()
+	testBankAddress  = crypto.PubkeyToAddress(testBankKey.PublicKey)
+	testBankFunds, _ = new(big.Int).SetString("99999999999999999999999", 10)
+	testUserKey, _   = crypto.GenerateKey()
+	testUserAddress  = crypto.PubkeyToAddress(testUserKey.PublicKey)
 
 	// Test transactions
 	pendingTxs []*types.Transaction
@@ -120,7 +119,7 @@ type testWorkerBackend struct {
 func newTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, n int) *testWorkerBackend {
 	var gspec = core.Genesis{
 		Config: chainConfig,
-		Alloc:  core.GenesisAlloc{testBankAddress: {Balance: testBankFunds}},
+		Alloc:  core.GenesisAlloc{testBankAddress: {Balance: testBankFunds}}, // TODO: pre-allocate accounts here
 	}
 
 	switch e := engine.(type) {

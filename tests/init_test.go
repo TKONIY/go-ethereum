@@ -116,6 +116,7 @@ func (tm *testMatcher) skipLoad(pattern string) {
 }
 
 // fails adds an expected failure for tests matching the pattern.
+//
 //nolint:unused
 func (tm *testMatcher) fails(pattern string, reason string) {
 	if reason == "" {
@@ -237,6 +238,7 @@ func (tm *testMatcher) runTestFile(t *testing.T, path, name string, runTest inte
 	} else {
 		for _, key := range keys {
 			name := name + "/" + key
+			fmt.Printf("Running %s\n", key)
 			t.Run(key, func(t *testing.T) {
 				if r, _ := tm.findSkip(name); r != "" {
 					t.Skip(r)
