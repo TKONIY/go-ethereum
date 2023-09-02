@@ -67,6 +67,7 @@ const (
 	LOOKUP
 	TRIESIZE
 	RW
+	THREAD_NUM
 )
 
 func get_record_num(dataset Dataset, t *testing.T) int {
@@ -84,6 +85,8 @@ func get_record_num(dataset Dataset, t *testing.T) int {
 		data_num_str = os.Getenv("GMPT_TRIESIZE")
 	case RW:
 		data_num_str = os.Getenv("GMPT_RW_RRATIO")
+	case THREAD_NUM:
+		data_num_str = os.Getenv("GMPT_THREAD_NUM")
 	default:
 		t.Fatalf("Wrong Dataset Type\n")
 	}
