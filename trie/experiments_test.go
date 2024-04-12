@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
-	"runtime"
+	// "runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -31,15 +31,15 @@ func record_data(filename string, data []string) {
 
 // !!! use TryGetHex and tryUpdateHex
 func TestInsertWiki(t *testing.T) {
-	thread_num := get_record_num(THREAD_NUM, t)
-	if thread_num > runtime.NumCPU() {
-		thread_num = runtime.NumCPU()
-	}
-	runtime.GOMAXPROCS(thread_num)
+	// thread_num := get_record_num(THREAD_NUM, t)
+	// if thread_num > runtime.NumCPU() {
+	// 	thread_num = runtime.NumCPU()
+	// }
+	// runtime.GOMAXPROCS(thread_num)
 	keys, values := readWikiFast(t)
 	assert.Equal(t, len(keys), len(values))
-	insert_num := get_record_num(WIKI, t)
-	// insert_num := 2500
+	// insert_num := get_record_num(WIKI, t)
+	insert_num := 320000
 	assert.LessOrEqual(t, insert_num, len(keys))
 
 	fmt.Printf("Inserting %d k-v pairs\n", insert_num)
@@ -62,27 +62,28 @@ func TestInsertWiki(t *testing.T) {
 	fmt.Printf("response time: %d %d %d\n",us,insert_us,hash_us)
 	fmt.Printf("Ethereum hash result: %v\n", hash)
 	fmt.Printf("Ethereum e2e throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/us, insert_num, 0)
-	data := []string{"Ethereum", strconv.Itoa(insert_num), strconv.Itoa(int(int64(insert_num)*1000000/us))}
-	record_data("../../data/e2e_wiki_thread"+strconv.Itoa(thread_num)+".csv", data)
+	// data := []string{"Ethereum", strconv.Itoa(insert_num), strconv.Itoa(int(int64(insert_num)*1000000/us))}
+	// record_data("../../data/e2e_wiki_thread"+strconv.Itoa(thread_num)+".csv", data)
 	fmt.Printf("Ethereum Insert throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/insert_us, insert_num, 0)
-	insert_data := []string{"Ethereum", strconv.Itoa(insert_num), strconv.Itoa(int(int64(insert_num)*1000000/insert_us))}
-	record_data("../../data/insert_wiki_thread"+strconv.Itoa(thread_num)+".csv", insert_data)
+	// insert_data := []string{"Ethereum", strconv.Itoa(insert_num), strconv.Itoa(int(int64(insert_num)*1000000/insert_us))}
+	// record_data("../../data/insert_wiki_thread"+strconv.Itoa(thread_num)+".csv", insert_data)
 	fmt.Printf("Ethereum hash throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/hash_us, insert_num, 0)
-	hash_data := []string{"Ethereum", strconv.Itoa(insert_num), strconv.Itoa(int(int64(insert_num)*1000000/hash_us))}
-	record_data("../../data/hash_wiki_thread"+strconv.Itoa(thread_num)+".csv", hash_data)
+	// hash_data := []string{"Ethereum", strconv.Itoa(insert_num), strconv.Itoa(int(int64(insert_num)*1000000/hash_us))}
+	// record_data("../../data/hash_wiki_thread"+strconv.Itoa(thread_num)+".csv", hash_data)
 }
 
 func TestInsertYCSB(t *testing.T) {
 	// fmt.Printf("CPU numbers: %d",runtime.NumCPU())
-	thread_num := get_record_num(THREAD_NUM, t)
-	if thread_num > runtime.NumCPU() {
-		thread_num = runtime.NumCPU()
-	}
-	runtime.GOMAXPROCS(thread_num)
-	keys, values, _ := readYcsb("ycsb_insert_read.txt", t)
+	thread_num := 104
+	// thread_num := get_record_num(THREAD_NUM, t)
+	// if thread_num > runtime.NumCPU() {
+	// 	thread_num = runtime.NumCPU()
+	// }
+	// runtime.GOMAXPROCS(thread_num)
+	keys, values, _ := readYcsb("normal.txt", t)
 	assert.Equal(t, len(keys), len(values))
 	insert_num := get_record_num(YCSB, t)
-	// insert_num:= 5000
+	// insert_num:= 640000
 	assert.LessOrEqual(t, insert_num, len(keys))
 
 	fmt.Printf("Inserting %d k-v pairs\n", insert_num)
@@ -103,22 +104,88 @@ func TestInsertYCSB(t *testing.T) {
 	hash_us := t3.Sub(t2).Microseconds()
 
 	fmt.Printf("Ethereum hash result: %v\n", hash)
+	fmt.Printf("response time: %d %d %d\n",us,insert_us,hash_us)
 	fmt.Printf("Ethereum e2e throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/us, insert_num, 0)
 	data := []string{"Ethereum", strconv.Itoa(insert_num), strconv.Itoa(int(int64(insert_num)*1000000/us))}
 	record_data("../../data/e2e_ycsb_thread"+strconv.Itoa(thread_num)+".csv", data)
 	fmt.Printf("Ethereum Insert throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/insert_us, insert_num, 0)
-	insert_data := []string{"Ethereum", strconv.Itoa(insert_num), strconv.Itoa(int(int64(insert_num)*1000000/insert_us))}
-	record_data("../../data/insert_ycsb_thread"+strconv.Itoa(thread_num)+".csv", insert_data)
+	// insert_data := []string{"Ethereum", strconv.Itoa(insert_num), strconv.Itoa(int(int64(insert_num)*1000000/insert_us))}
+	// record_data("../../data/bulk.csv", insert_data)
 	fmt.Printf("Ethereum hash throughput: %d qps for %d operations and trie with %d records\n", int64(insert_num)*1000000/hash_us, insert_num, 0)
-	hash_data := []string{"Ethereum", strconv.Itoa(insert_num), strconv.Itoa(int(int64(insert_num)*1000000/hash_us))}
-	record_data("../../data/hash_ycsb_thread"+strconv.Itoa(thread_num)+".csv", hash_data)
+	// hash_data := []string{"Ethereum", strconv.Itoa(insert_num), strconv.Itoa(int(int64(insert_num)*1000000/hash_us))}
+	// record_data("../../data/hash_ycsb_thread"+strconv.Itoa(thread_num)+".csv", hash_data)
 }
+
+func TestInsertYCSBzip(t *testing.T) {
+	// fmt.Printf("CPU numbers: %d",runtime.NumCPU())
+	// thread_num := 104
+	// thread_num := get_record_num(THREAD_NUM, t)
+	// if thread_num > runtime.NumCPU() {
+	// 	thread_num = runtime.NumCPU()
+	// }
+	// runtime.GOMAXPROCS(thread_num)
+	theta := get_record_num(ZIPF, t)
+	// theta := 0
+	// declare keys and values
+	var rwkeys, rwvalues, bkeys, bvalues [][]byte
+	var rwflags []bool
+
+	record_num :=320000
+	insert_num:= 960000
+
+	if theta ==0 {
+		rwkeys, rwvalues, bkeys, bvalues, rwflags = readYcsbRW1(t, record_num, "/ycsb/uniform.txt")
+	} else if theta < 10 {
+		rwkeys, rwvalues, bkeys, bvalues, rwflags = readYcsbRW1(t, record_num, "/ycsb/zipf0" + strconv.Itoa(theta) + ".txt")
+	} else {
+		rwkeys, rwvalues, bkeys, bvalues, rwflags = readYcsbRW1(t, record_num, "/ycsb/zipf" + strconv.Itoa(theta) + ".txt")
+	}
+
+	assert.Equal(t, len(bkeys), len(bvalues))
+	assert.Equal(t, len(rwkeys), len(rwvalues))
+	assert.Equal(t, len(rwkeys), len(rwflags))
+	// insert_num := get_record_num(YCSB, t)
+
+	assert.LessOrEqual(t, insert_num, len(rwkeys))
+
+	rw_num := len(rwkeys)
+	triedb := NewDatabase(rawdb.NewMemoryDatabase())
+	trie := NewEmpty(triedb)
+	valuesGet := make([][]byte, rw_num)
+	for i := 0; i < record_num; i++ {
+		trie.tryUpdateHex(bkeys[i], bvalues[i])
+	}
+	hash := trie.Hash()
+	fmt.Printf("Ethereum old hash result: %v\n", hash)
+	read_num := 0
+	t1 := time.Now()
+	for i := 0; i < rw_num; i++ {
+		if rwflags[i] == read_flag {
+			valueGet, _ := trie.TryGetHex(rwkeys[i])
+			valuesGet[read_num] = valueGet
+			read_num += 1
+		} else if rwflags[i] == write_flag {
+			trie.tryUpdateHex(rwkeys[i], rwvalues[i])
+		} else {
+			panic("wrong flag")
+		}
+	}
+	hash = trie.Hash()
+	t2 := time.Now()
+	us := t2.Sub(t1).Microseconds()
+	fmt.Printf("Ethereum new hash result: %v\n", hash)
+	fmt.Printf("valuesGet num: %d\n", read_num)
+	fmt.Printf("Ethereum rw throughput: %d qps for %d operations and trie with %d zipf\n", int64(rw_num)*1000000/us, rw_num, theta)
+	data := []string{"Ethereum", strconv.Itoa(theta), strconv.Itoa(int(int64(rw_num)*1000000/us))}
+	record_data("../../data/zipf.csv", data)
+}
+
 
 func TestInsertEthtxn(t *testing.T) {
 	keys, values := readEthtxn(t)
 	assert.Equal(t, len(keys), len(values))
-	insert_num := get_record_num(ETH, t)
-	// insert_num := 5000
+	// insert_num := get_record_num(ETH, t)
+	insert_num := 640000
 	assert.LessOrEqual(t, insert_num, len(keys))
 
 	fmt.Printf("Inserting %d k-v pairs\n", insert_num)

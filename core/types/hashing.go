@@ -17,7 +17,7 @@
 package types
 
 // #include "libgmpt.h"
-// #cgo LDFLAGS: -L. -lgmpt -L/usr/local/cuda/lib64 -lcudart -lstdc++ -lcryptopp -lm -L/usr/local/lib -ltbb -ltbbmalloc
+// #cgo LDFLAGS: -L. -lgmpt -L/usr/local/cuda/lib64 -lcudart -lstdc++ -lcryptopp -lm -L/home/ymx/package/usr/local/lib -ltbb -ltbbmalloc
 import "C"
 
 import (

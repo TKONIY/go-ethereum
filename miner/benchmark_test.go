@@ -273,8 +273,8 @@ func TestGMPTTransactionProcessing(t *testing.T) {
 	)
 
 	// read data
-	ntxn := get_txn_num(t)
-	// ntxn := 640000
+	// ntxn := get_txn_num(t)
+	ntxn := 1500
 	readEthTxns(t, ntxn)
 	// for _, tx := range testTxList {
 	// 	fmt.Printf("tx: %v\n sender: %v\n", tx, tx.From.Load().(types.SigCache).From)

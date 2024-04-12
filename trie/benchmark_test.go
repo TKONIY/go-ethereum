@@ -68,6 +68,7 @@ const (
 	TRIESIZE
 	RW
 	THREAD_NUM
+	ZIPF
 )
 
 func get_record_num(dataset Dataset, t *testing.T) int {
@@ -87,6 +88,8 @@ func get_record_num(dataset Dataset, t *testing.T) int {
 		data_num_str = os.Getenv("GMPT_RW_RRATIO")
 	case THREAD_NUM:
 		data_num_str = os.Getenv("GMPT_THREAD_NUM")
+	case ZIPF:
+		data_num_str = os.Getenv("GMPT_ZIPF")
 	default:
 		t.Fatalf("Wrong Dataset Type\n")
 	}
@@ -322,7 +325,7 @@ func TestHashWikiBench(t *testing.T) {
 }
 
 func readYcsb(file_name string, t *testing.T) (wkeys, wvalues, rkeys [][]byte) {
-	path := "../../dataset/ycsb/" + file_name
+	path := "/ycsb/" + file_name
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
@@ -381,6 +384,13 @@ func readYcsbRW(t *testing.T, tsize, ratio int) (rwkeys, rwvalues, bkeys, bvalue
 				rwkeys = append(rwkeys, keybytesToHex([]byte(key)))
 				rwvalues = append(rwvalues, []byte(value))
 				rwflags = append(rwflags, write_flag)
+			case "UPDATE":
+				kEnd := strings.IndexByte(remain, ' ')
+				key := remain[:kEnd]
+				value := remain[kEnd+1:]
+				rwkeys = append(rwkeys, keybytesToHex([]byte(key)))
+				rwvalues = append(rwvalues, []byte(value))
+				rwflags = append(rwflags, write_flag)
 			case "READ":
 				key := remain
 				value := "EOF"
@@ -395,6 +405,58 @@ func readYcsbRW(t *testing.T, tsize, ratio int) (rwkeys, rwvalues, bkeys, bvalue
 	}
 	return rwkeys, rwvalues, bkeys, bvalues, rwflags
 }
+
+func readYcsbRW1(t *testing.T, tsize int, path string) (rwkeys, rwvalues, bkeys, bvalues [][]byte, rwflags []bool) {
+	file, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	i := 0
+	for scanner.Scan() {
+		line := scanner.Text()
+		opEnd := strings.IndexByte(line, ' ')
+		op := line[:opEnd]
+		remain := line[opEnd+1:]
+		if i < tsize {
+			assert.Equal(t, op, "INSERT")
+			kEnd := strings.IndexByte(remain, ' ')
+			key := remain[:kEnd]
+			value := remain[kEnd+1:]
+			bkeys = append(bkeys, keybytesToHex([]byte(key)))
+			bvalues = append(bvalues, []byte(value))
+		} else {
+			switch op {
+			case "INSERT":
+				kEnd := strings.IndexByte(remain, ' ')
+				key := remain[:kEnd]
+				value := remain[kEnd+1:]
+				rwkeys = append(rwkeys, keybytesToHex([]byte(key)))
+				rwvalues = append(rwvalues, []byte(value))
+				rwflags = append(rwflags, write_flag)
+			case "UPDATE":
+				kEnd := strings.IndexByte(remain, ' ')
+				key := remain[:kEnd]
+				value := remain[kEnd+1:]
+				rwkeys = append(rwkeys, keybytesToHex([]byte(key)))
+				rwvalues = append(rwvalues, []byte(value))
+				rwflags = append(rwflags, write_flag)
+			case "READ":
+				key := remain
+				value := "EOF"
+				rwkeys = append(rwkeys, keybytesToHex([]byte(key)))
+				rwvalues = append(rwvalues, []byte(value))
+				rwflags = append(rwflags, read_flag)
+			default:
+				t.Fatalf("Wrong operation %v\n", op)
+			}
+		}
+		i++
+	}
+	return rwkeys, rwvalues, bkeys, bvalues, rwflags
+}
+
 
 func TestETEYCSBBench(t *testing.T) {
 	wkeys, wvalues, rkeys := readYcsb("ycsb_insert_read.txt", t)
