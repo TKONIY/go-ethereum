@@ -325,7 +325,7 @@ func TestHashWikiBench(t *testing.T) {
 }
 
 func readYcsb(file_name string, t *testing.T) (wkeys, wvalues, rkeys [][]byte) {
-	path := "/ycsb/" + file_name
+	path := "../../dataset/ycsb/" + file_name
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatal(err)
